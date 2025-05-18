@@ -6,11 +6,10 @@ import json
 import time
 from pathlib import Path
 from explorer import FileExplorer
-import urllib
 
 gi.require_version('Gtk', '3.0')
 gi.require_version('WebKit2', '4.0')
-from gi.repository import Gtk, WebKit2, GLib, Gio, Gdk, GdkPixbuf, Pango
+from gi.repository import Gtk, WebKit2, GLib, Gio, Gdk, GdkPixbuf
 
 
 class Bookmark:
@@ -88,17 +87,10 @@ class WebBrowser(Gtk.Window):
     def __init__(self):
         Gtk.Window.__init__(self, title="GTK Web Browser")
         self.set_default_size(1200, 800)
-        self.connect("destroy", Gtk.main_quit)
-        self.connect("button-press-event", self.on_button_press)
-        self.connect("notify::uri", self.on_uri_changed)
-        self.win2=""
-        self.win2=""
+        #self.connect("destroy", Gtk.main_quit)
         self.fileView = False
         self.forceWeb = False
         self.scroll=1
-        self.history = []
-        self.skipHistory=False
-        self.histPoint = 0
 
         # Set up data directory
         self.data_dir = os.path.join(os.path.expanduser("~"), ".gtk-web-browser")
@@ -141,12 +133,6 @@ class WebBrowser(Gtk.Window):
 
         # Create WebView with optimized settings
         self.webview = self.create_optimized_webview()
-        self.setup_youtube_content_blocker(self.webview)
-        self.inject_youtube_optimizer(self.webview)
-        self.fix_youtube_seeking(self.webview)
-        self.save_path = "/home/sheeye/Videos/Download/"
-        context = self.webview.get_context()
-        context.connect("download-started", self.on_download_started)
         # Add this line after creating the webview
         #self.setup_memory_management()
 
@@ -168,7 +154,6 @@ class WebBrowser(Gtk.Window):
 
         # Connect to signals to maintain transparency
         self.webview.connect("load-changed", self.on_load_changed)
-        #self.webview.connect("notify::uri", self.on_uri_changed)
         self.webview.connect("create", self.on_create_window)
 
         # Enable transparency in the WebView settings
@@ -208,8 +193,6 @@ class WebBrowser(Gtk.Window):
 
         # Load default page
         self.webview.load_uri("https://www.google.com")
-        #self.webview.connect("scroll-event", self.on_scroll_event)
-        self.webview.connect("button-press-event", self.on_button_press)
         self.set_icon_from_file("icon.png")
 
         # Bookmark button state (will update when page loads)
@@ -220,26 +203,6 @@ class WebBrowser(Gtk.Window):
         self.prefetch_dns()
         self.setup_content_filters()
         self.setup_script_blocking()
-
-    def on_download_started(self, webview, download):
-        download.connect("decide-destination", self.on_decide_destination)
-
-    def on_decide_destination(self, download, suggested_filename):
-        uri = download.get_request().get_uri()
-        parsed_url = urllib.parse.urlparse(uri)
-
-        # Get the domain and extract the first part
-        netloc = parsed_url.netloc
-        domain_root = netloc.split(".")[-2] if "." in netloc else netloc
-        target_dir = os.path.join(self.save_path, domain_root)
-
-        # Ensure directory exists
-        os.makedirs(target_dir, exist_ok=True)
-
-        # Full path to the downloaded file
-        file_path = os.path.join(target_dir, suggested_filename)
-        download.set_destination(f"file://{file_path}")
-        return True
 
     def pop_download(self, link, format_code):
         script_path = os.path.join(os.path.dirname(__file__), "youtube-download.sh")
@@ -326,10 +289,9 @@ class WebBrowser(Gtk.Window):
 
         # Connect signals
         webview.connect("load-changed", self.on_load_changed)
-        webview.connect("notify::uri", self.on_uri_changed)
         webview.connect("decide-policy", self.on_decide_policy)
         webview.connect("notify::title", self.on_title_changed)
-        webview.connect("button-press-event", self.on_button_press)
+
 
         # Get settings object
         settings = webview.get_settings()
@@ -354,12 +316,9 @@ class WebBrowser(Gtk.Window):
         # Enable popup handling
         settings.set_property("javascript-can-open-windows-automatically", True)
         settings.set_property("allow-modal-dialogs", True)
-        settings.set_enable_accelerated_2d_canvas(True)
-        settings.set_enable_webgl(True)
 
         # Set mobile user agent
         mobile_user_agent = "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1"
-        #mobile_user_agent = "Mozilla/5.0 (iPad; CPU OS 15_0 like Mac OS X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.50 Safari/537.36"
         settings.set_property("user-agent", mobile_user_agent)
 
 
@@ -369,7 +328,7 @@ class WebBrowser(Gtk.Window):
 
         # Media playback optimizations
         settings.set_property("enable-webaudio", True)
-        settings.set_property("media-playback-requires-user-gesture", True)
+        settings.set_property("media-playback-requires-user-gesture", False)
         settings.set_property("enable-media-capabilities", True)
 
         # Developer options
@@ -714,7 +673,7 @@ class WebBrowser(Gtk.Window):
 
         # New Window Button
         # Use convenient constructor for icon buttons
-        self.url_entry2 = Gtk.Entry()
+        self.url_entry = Gtk.Entry()
         new_window_button = Gtk.Button()
 
         try:
@@ -829,7 +788,7 @@ class WebBrowser(Gtk.Window):
             print(f"Warning: Could not load history.png: {e}")
             history_button.set_label("Hist")  # Fallback text
         history_button.set_tooltip_text("History")
-        history_button.connect("clicked", self.on_show_history)
+        history_button.connect("clicked", self.on_history)
         button_context_green = history_button.get_style_context()
         button_context_green.add_provider(
             toolbar_style_provider_green,
@@ -991,7 +950,7 @@ class WebBrowser(Gtk.Window):
             )
 
             dev_tools_button.set_tooltip_text("Developer Tools")
-            dev_tools_button.connect("clicked", self.perform_memory_cleanup)
+            dev_tools_button.connect("clicked", self.on_developer_tools)
             toolbar_purple.pack_start(dev_tools_button, False, False, 0)
 
         spacer = Gtk.Box()
@@ -1058,14 +1017,7 @@ class WebBrowser(Gtk.Window):
 
         # Connect signals
         self.webview.connect("load-changed", self.on_load_changed)
-        #self.webview.connect("notify::uri", self.on_uri_changed)
         self.webview.connect("decide-policy", self.on_decide_policy)
-        self.webview.connect("create", self.on_create_window)
-        self.webview.connect("notify::uri", self.on_uri_changed)
-        self.webview.connect("button-press-event", self.on_button_press)
-        context = self.webview.get_context()
-        context.connect("download-started", self.on_download_started)
-
 
         # Add to container
         scrolled_window.add(self.webview)
@@ -1099,27 +1051,27 @@ class WebBrowser(Gtk.Window):
 
         name_item = Gtk.RadioMenuItem(label="Youtube (VIDEO)")
         #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://youtube.com"))
+        name_item.connect("activate", lambda x: self.webview.load_uri("https://yewtu.be"))
         menu.append(name_item)
 
         name_item = Gtk.RadioMenuItem(label="GryPl (GAMES)")
         #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://gry.pl"))
+        name_item.connect("activate", lambda x: self.webview.load_uri("https://gry.pl"))
         menu.append(name_item)
 
         name_item = Gtk.RadioMenuItem(label="Aliexpress (SHOP)")
         #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://pl.aliexpress.com/"))
+        name_item.connect("activate", lambda x: self.webview.load_uri("https://pl.aliexpress.com/"))
         menu.append(name_item)
 
         name_item = Gtk.RadioMenuItem(label="Overleaf (TEX)")
         #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://www.overleaf.com/project"))
+        name_item.connect("activate", lambda x: self.webview.load_uri("https://www.overleaf.com/project"))
         menu.append(name_item)
 
         name_item = Gtk.RadioMenuItem(label="Github (DEV)")
         #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://github.com/"))
+        name_item.connect("activate", lambda x: self.webview.load_uri("https://github.com/"))
         menu.append(name_item)
 
         # Separator in sort submenu
@@ -1128,12 +1080,12 @@ class WebBrowser(Gtk.Window):
         
         name_item = Gtk.RadioMenuItem(label="Wikipedia (INFO)")
         #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://en.wikipedia.org/wiki/Special:Random"))
+        name_item.connect("activate", lambda x: self.webview.load_uri("https://en.wikipedia.org/wiki/Special:Random"))
         menu.append(name_item)
 
         name_item = Gtk.RadioMenuItem(label="LKML (INFO)")
         #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://lkml.org"))
+        name_item.connect("activate", lambda x: self.webview.load_uri("https://lkml.org"))
         menu.append(name_item)
 
         sort_sep = Gtk.SeparatorMenuItem()
@@ -1141,17 +1093,17 @@ class WebBrowser(Gtk.Window):
 
         name_item = Gtk.RadioMenuItem(label="Pinterest (IMG)")
         #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://pl.pinterest.com/"))
+        name_item.connect("activate", lambda x: self.webview.load_uri("https://pl.pinterest.com/"))
         menu.append(name_item)
 
         name_item = Gtk.RadioMenuItem(label="Dan Booru (IMG)")
         #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://danbooru.donmai.us/posts"))
+        name_item.connect("activate", lambda x: self.webview.load_uri("https://danbooru.donmai.us/posts"))
         menu.append(name_item)
 
         name_item = Gtk.RadioMenuItem(label="Civitai (IMG)")
         #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://civitai.com/home"))
+        name_item.connect("activate", lambda x: self.webview.load_uri("https://civitai.com/home"))
         menu.append(name_item)
 
         sort_sep = Gtk.SeparatorMenuItem()
@@ -1159,17 +1111,17 @@ class WebBrowser(Gtk.Window):
 
         name_item = Gtk.RadioMenuItem(label="ChatGPT (AI)")
         #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://chatgpt.com/"))
+        name_item.connect("activate", lambda x: self.webview.load_uri("https://chatgpt.com/"))
         menu.append(name_item)
 
         name_item = Gtk.RadioMenuItem(label="Claude (AI)")
         #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://claude.ai/"))
+        name_item.connect("activate", lambda x: self.webview.load_uri("https://claude.ai/"))
         menu.append(name_item)
 
         name_item = Gtk.RadioMenuItem(label="Deepseek (AI)")
         #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://chat.deepseek.com/"))
+        name_item.connect("activate", lambda x: self.webview.load_uri("https://chat.deepseek.com/"))
         menu.append(name_item)
 
 
@@ -1179,7 +1131,7 @@ class WebBrowser(Gtk.Window):
 
         name_item = Gtk.RadioMenuItem(label="Translate (TOOL)")
         #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://www.google.com/search?q=google+translate"))
+        name_item.connect("activate", lambda x: self.webview.load_uri("https://www.google.com/search?q=google+translate"))
         menu.append(name_item)
 
 
@@ -1337,82 +1289,34 @@ class WebBrowser(Gtk.Window):
         about_dialog.destroy()
 
     def on_back_clicked(self, widget):
-        self.histPoint+=1
-
-        if self.histPoint>=len(self.history):
-            self.histPoint=len(self.history)-1
-        self.skipHistory=True
-        self.load_url(self.history[len(self.history)-1-self.histPoint])
-
-        newHist = []
-        for c in range(len(self.history)):
-            if c == 0 or self.history[c] != self.history[c - 1]:
-                newHist.append(self.history[c])
-        self.history = newHist
-        #self.win2.load_directory(self.history[len(self.history)-1-self.histPoint])
-        #self.skipHistory = True
-        #self.win2.current_path=self.url_entry.get_text()
-        #self.win2.on_refresh_clicked(None)
-        #print("GOING BACK",self.win2.current_path,self.url_entry.get_text(),self.history[len(self.history)-2-self.histPoint])
-        if False:
-            if not self.fileView:
-                if self.webview.can_go_back():
-                    self.webview.go_back()
-                    self.load_url(self.win2.current_path)
-                    if False:
-                        if self.url_entry.get_text().__contains__("file://"):
-                            #print("Yo")
-                            self.fileView = True
-                            self.on_bookmark_button_toggled(None)
-            else:
-                self.win2.go_back()
+        if not self.fileView:
+            if self.webview.can_go_back():
+                self.webview.go_back()
+                self.load_url(self.win2.current_path)
+                if False:
+                    if self.url_entry.get_text().__contains__("file://"):
+                        print("Yo")
+                        self.fileView = True
+                        self.on_bookmark_button_toggled(None)
+        else:
+            self.win2.go_back()
 
     def on_forward_clicked(self, widget):
-        self.histPoint-=1
-        if self.histPoint<0:
-            self.histPoint=0
-        self.skipHistory=True
-        self.load_url(self.history[len(self.history)-1-self.histPoint])
-        #self.win2.load_directory(self.history[len(self.history) - 1 - self.histPoint])
-        #self.win2.load_directory(self.win2.current_path)
-        #self.win2.current_path=self.url_entry.get_text()
-        #self.win2.on_refresh_clicked(None)
-        if self.win2.current_path!=self.url_entry.get_text():
-            #self.win2.current_path = self.url_entry.get_text()
-            self.win2.load_directory(self.win2.current_path)
-        newHist = []
-        for c in range(len(self.history)):
-            if c == 0 or self.history[c] != self.history[c - 1]:
-                newHist.append(self.history[c])
-        if False:
-            if not self.fileView:
-                if self.webview.can_go_forward():
-                    self.webview.go_forward()
-            # File manager
-            else:
-                if self.win2.history_pos < len(self.win2.history) - 1:
-                    self.win2.history_pos += 1
-                    path = self.win2.history[self.win2.history_pos]
-                    self.win2.load_directory(path)
+        if not self.fileView:
+            if self.webview.can_go_forward():
+                self.webview.go_forward()
+        # File manager
+        else:
+            if self.win2.history_pos < len(self.win2.history) - 1:
+                self.win2.history_pos += 1
+                path = self.win2.history[self.win2.history_pos]
+                self.win2.load_directory(path)
 
     def on_refresh_clicked(self, widget):
         if not self.fileView:
             self.webview.reload()
         else:
             self.win2.load_directory(self.win2.current_path)
-
-    def on_button_press(self, widget, event):
-        button_num = event.button
-        #print("huh")
-
-        if button_num == 8:
-            self.on_back_clicked(None)
-            return True
-        elif button_num == 9:
-            self.on_forward_clicked(None)
-            return True
-
-        return False
 
 
     def on_home_clicked(self, widget):
@@ -1470,11 +1374,10 @@ class WebBrowser(Gtk.Window):
             if not url.__contains__("old.reddit.com"):
                 url = url.replace("reddit.com","old.reddit.com")
                 url=url.replace("www.","")
-        if False:
-            if url.__contains__("youtube.com"):
-                url = url.replace("youtube.com", "inv.nadeko.net")
-            if url.__contains__("yewtu.be"):
-                url = url.replace("yewtu.be", "inv.nadeko.net")
+        if url.__contains__("youtube.com"):
+            url = url.replace("youtube.com", "inv.nadeko.net")
+        if url.__contains__("yewtu.be"):
+            url = url.replace("yewtu.be", "inv.nadeko.net")
         self.webview.load_uri(url)
         if url.startswith("file://") and (len(url)<6 or not url[len(url)-5:].__contains__(".")):
             self.fileView=True
@@ -1484,10 +1387,6 @@ class WebBrowser(Gtk.Window):
             self.fileView=False
             self.forceWeb=False
         print(self.fileView)
-        newHist = []
-        for c in range(len(self.history)):
-            if c == 0 or self.history[c] != self.history[c - 1]:
-                newHist.append(self.history[c])
         self.on_bookmark_button_toggled(None)
 
         #self.webview.override_background_color(Gtk.StateType.NORMAL, Gdk.RGBA(0, 0, 0, 0.65))
@@ -1507,36 +1406,6 @@ class WebBrowser(Gtk.Window):
                 self.bookmark_button.set_tooltip_text("Add Bookmark")
             self.bookmark_button.handler_unblock_by_func(self.on_bookmark_button_toggled)
 
-    def on_uri_changed(self, web_view, uri2):
-        uri = web_view.get_uri()
-        if not self.skipHistory:
-            url = web_view.get_uri()
-            if url.endswith("/"):
-                url = url[:len(url) - 1]
-            if url.startswith("file://"):
-                url = url.replace("file://", "")
-            self.history.insert(len(self.history) - self.histPoint, url)
-            newHist = []
-            for c in range(len(self.history)):
-                if c==0 or self.history[c]!=self.history[c-1]:
-                    newHist.append(self.history[c])
-            self.history = newHist
-            #self.history = list(dict.fromkeys(self.history))
-        #print(self.history)
-        self.url_entry.set_text(uri)
-        if self.win2.current_path != self.url_entry.get_text():
-            #self.win2.current_path = self.url_entry.get_text()
-            self.win2.load_directory(self.url_entry.get_text())
-        #self.win2.load_directory(uri)
-        #print(uri)
-        #print("of uri was loaded!!!",uri)
-        self.skipHistory = False
-        if self.win2!="":
-            #self.win2.load_directory(self.url_entry.get_text())
-            self.win2.current_path=self.url_entry.get_text()
-            #self.win2.on_refresh_clicked(None)
-            #print("win2 loaded",self.win2.current_path)
-
     def on_load_changed(self, web_view, load_event):
         if load_event == WebKit2.LoadEvent.STARTED:
             pixbuf = GdkPixbuf.PixbufAnimation.new_from_file("aol_loading_image.gif")
@@ -1546,14 +1415,7 @@ class WebBrowser(Gtk.Window):
 
             self.statusbar.push(self.statusbar_context, "Loading...")
             self.statusbar.show_all()
-            self.url_entry.set_text(web_view.get_uri())
-            if self.win2.current_path != self.url_entry.get_text():
-                # self.win2.current_path = self.url_entry.get_text()
-                self.win2.load_directory(self.url_entry.get_text())
-            #self.win2.load_directory(self.url_entry.get_text())
-
         elif load_event == WebKit2.LoadEvent.COMMITTED:
-
 
             uri = web_view.get_uri()
             if uri:
@@ -1563,10 +1425,6 @@ class WebBrowser(Gtk.Window):
                 self.load_button.set_image(image)
 
                 self.url_entry.set_text(uri)
-                if self.win2.current_path != self.url_entry.get_text():
-                    # self.win2.current_path = self.url_entry.get_text()
-                    self.win2.load_directory(self.url_entry.get_text())
-                #self.win2.load_directory(self.url_entry.get_text())
 
                 url = uri
 
@@ -1575,19 +1433,14 @@ class WebBrowser(Gtk.Window):
                         url = url.replace("reddit.com", "old.reddit.com")
                         url = url.replace("www.", "")
                         self.load_url(url)
-                if False:
-                    if url.__contains__("youtube.com"):
-                        url = url.replace("youtube.com", "inv.nadeko.net")
-                        url = url.replace("www.", "")
-                    if url.__contains__("yewtu.be"):
-                        url = url.replace("yewtu.be", "inv.nadeko.net")
-                        url = url.replace("www.", "")
+                if url.__contains__("youtube.com"):
+                    url = url.replace("youtube.com", "inv.nadeko.net")
+                    url = url.replace("www.", "")
+                if url.__contains__("yewtu.be"):
+                    url = url.replace("yewtu.be", "inv.nadeko.net")
+                    url = url.replace("www.", "")
 
                 self.url_entry.set_text(url)
-                if self.win2.current_path != self.url_entry.get_text():
-                    # self.win2.current_path = self.url_entry.get_text()
-                    self.win2.load_directory(self.url_entry.get_text())
-                #self.win2.load_directory(self.url_entry.get_text())
 
 
                 self.statusbar.push(self.statusbar_context, f"Loading: {uri}")
@@ -1597,11 +1450,6 @@ class WebBrowser(Gtk.Window):
             #self.webview.override_background_color(Gtk.Statetype.Normal,Gdk.RGBA(0.7,0.7,0.7,0.6))
             self.statusbar.push(self.statusbar_context, "Ready")
             pixbuf = GdkPixbuf.Pixbuf.new_from_file("loaded.png")
-            self.url_entry.set_text(web_view.get_uri())
-            if self.win2.current_path != self.url_entry.get_text():
-                # self.win2.current_path = self.url_entry.get_text()
-                self.win2.load_directory(self.url_entry.get_text())
-            #self.win2.load_directory(self.url_entry.get_text())
             self.statusbar.hide()
             # Scale pixbuf if needed: pixbuf = pixbuf.scale_simple(16, 16, GdkPixbuf.InterpType.BILINEAR)
             image = Gtk.Image.new_from_pixbuf(pixbuf)
@@ -1609,13 +1457,9 @@ class WebBrowser(Gtk.Window):
             self.update_bookmark_button_state()
 
         # Update navigation buttons
-            self.back_button.set_sensitive(True)
-            self.forward_button.set_sensitive(True)
-            if self.win2.current_path != self.url_entry.get_text():
-                #self.win2.current_path = self.url_entry.get_text()
-                self.win2.load_directory(self.win2.current_path)
-            #self.win2.current_path = self.url_entry.get_text()
-            #self.win2.load_directory(self.url_entry.get_text())
+        if not self.fileView:
+            self.back_button.set_sensitive(self.webview.can_go_back())
+            self.forward_button.set_sensitive(self.webview.can_go_forward())
 
 
 
@@ -1738,9 +1582,6 @@ class WebBrowser(Gtk.Window):
             url_label = Gtk.Label(label="URL:")
             url_entry = Gtk.Entry()
             url_entry.set_text(uri)
-            if self.win2.current_path != self.url_entry.get_text():
-                # self.win2.current_path = self.url_entry.get_text()
-                self.win2.load_directory(self.url_entry.get_text())
             url_box.pack_start(url_label, False, False, 0)
             url_box.pack_start(url_entry, True, True, 0)
             box.pack_start(url_box, False, False, 0)
@@ -1835,7 +1676,6 @@ class WebBrowser(Gtk.Window):
 
     def on_bookmark_clicked(self, widget, url):
         self.load_url(url)
-        self.load_url(url)
 
     def on_show_channels(self, widget):
         bookmarks = self.bookmark_manager.get_all_bookmarks()
@@ -1857,7 +1697,7 @@ class WebBrowser(Gtk.Window):
         # Columns: Title, URL, Date Added, (hidden) Bookmark Object
         liststore = Gtk.ListStore(str, str, str, object)
 
-        bookmarks = [Bookmark("Absolute Terry Davis","https://youtube.com/channel/UCuIUshnWOUD-a4d5Z54kj8A"),Bookmark("African Mann","https://youtube.com/channel/UCz2bxDAlwdvI8UKJS_W6CgQ"),Bookmark("Dhar Mann","https://youtube.com/channel/UC_hK9fOxyy_TM8FJGXIyG8Q"),Bookmark("Destiny","https://youtube.com/channel/UC554eY5jNUfDq3yDOJYirOQ"),Bookmark("Shady Penguinn","https://youtube.com/channel/UCU_mC__7H8NBJzX8ubMGY4Q"),Bookmark("No Text To Speech","https://youtube.com/channel/UCxaaULLk6UCnRl5VKRc7G0A")]
+        bookmarks = [Bookmark("Absolute Terry Davis","https://yewtu.be/channel/UCuIUshnWOUD-a4d5Z54kj8A"),Bookmark("African Mann","https://inv.nadeko.net/channel/UCz2bxDAlwdvI8UKJS_W6CgQ"),Bookmark("Dhar Mann","https://inv.nadeko.net/channel/UC_hK9fOxyy_TM8FJGXIyG8Q"),Bookmark("Destiny","https://yewtu.be/channel/UC554eY5jNUfDq3yDOJYirOQ"),Bookmark("Shady Penguinn","https://yewtu.be/channel/UCU_mC__7H8NBJzX8ubMGY4Q"),Bookmark("No Text To Speech","https://inv.nadeko.net/channel/UCxaaULLk6UCnRl5VKRc7G0A")]
 
         # Fill the liststore with bookmarks
         for bookmark in bookmarks:
@@ -1905,88 +1745,6 @@ class WebBrowser(Gtk.Window):
         # After dialog is closed, update the bookmarks menu
         self.update_bookmarks_menu()
 
-
-    def on_show_history(self, widget):
-        bookmarks = self.bookmark_manager.get_all_bookmarks()
-
-        dialog = Gtk.Dialog(
-            title="History",
-            parent=self,
-            flags=0,
-            buttons=(Gtk.STOCK_CLOSE, Gtk.ResponseType.CLOSE)
-        )
-        dialog.set_default_size(500, 400)
-
-        # Create a scrollable list
-        scrolled_window = Gtk.ScrolledWindow()
-        scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scrolled_window.set_shadow_type(Gtk.ShadowType.ETCHED_IN)
-
-        # Create liststore model for bookmark data
-        # Columns: Title, URL, Date Added, (hidden) Bookmark Object
-        liststore = Gtk.ListStore(str, str, Pango.Weight, object)
-
-        #bookmarks = [Bookmark("Absolute Terry Davis","https://yewtu.be/channel/UCuIUshnWOUD-a4d5Z54kj8A"),Bookmark("African Mann","https://inv.nadeko.net/channel/UCz2bxDAlwdvI8UKJS_W6CgQ"),Bookmark("Dhar Mann","https://inv.nadeko.net/channel/UC_hK9fOxyy_TM8FJGXIyG8Q"),Bookmark("Destiny","https://yewtu.be/channel/UC554eY5jNUfDq3yDOJYirOQ"),Bookmark("Shady Penguinn","https://yewtu.be/channel/UCU_mC__7H8NBJzX8ubMGY4Q"),Bookmark("No Text To Speech","https://inv.nadeko.net/channel/UCxaaULLk6UCnRl5VKRc7G0A")]
-        bookmarks = []
-        b = 0
-        for c in self.history:
-            if b == len(self.history) - 1 - self.histPoint:
-                adder = "👉 "
-                # Add bold formatting to the selected entry
-                bookmarks.append(Bookmark(f"{adder} {self.history[b]}", self.history[b], Pango.Weight.BOLD))
-            else:
-                adder = f"{b + 1}. "
-                bookmarks.append(Bookmark(f"{adder} {self.history[b]}", self.history[b], Pango.Weight.NORMAL))
-            b += 1
-        # Fill the liststore with bookmarks
-        for bookmark in bookmarks:
-            #date_str = time.strftime("%Y-%m-%d %H:%M", time.localtime(bookmark.date_added))
-            liststore.append([bookmark.title, bookmark.url, bookmark.date_added, bookmark])
-
-        # Create TreeView
-        treeview = Gtk.TreeView(model=liststore)
-        treeview.set_headers_visible(True)
-
-        renderer = Gtk.CellRendererText()
-        title_column = Gtk.TreeViewColumn("History", renderer, text=0, weight=2)  # Assuming weight is stored at index 2
-        #treeview.append_column(title_column)
-
-        #title_column = Gtk.TreeViewColumn("History", renderer, text=0)
-        title_column.set_expand(True)
-        title_column.set_sort_column_id(0)
-        treeview.append_column(title_column)
-
-
-        # Connect double-click signal
-        treeview.connect("row-activated", self.on_bookmark_row_activated)
-
-        # Set up context menu
-        treeview.connect("button-press-event", self.on_bookmark_button_press)
-
-        scrolled_window.add(treeview)
-        dialog.get_content_area().pack_start(scrolled_window, True, True, 0)
-
-        # Add toolbar buttons below the treeview
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        button_box.set_margin_top(6)
-        button_box.set_margin_bottom(6)
-        button_box.set_margin_start(6)
-        button_box.set_margin_end(6)
-
-        # Visit button
-        visit_button = Gtk.Button.new_with_label("Visit")
-        visit_button.connect("clicked", self.on_history_dialog_visit, treeview)
-        button_box.pack_end(visit_button, False, False, 0)
-
-        dialog.get_content_area().pack_start(button_box, False, False, 0)
-
-        dialog.show_all()
-        response = dialog.run()
-        dialog.destroy()
-
-        # After dialog is closed, update the bookmarks menu
-        self.update_bookmarks_menu()
-
     def on_show_bookmarks(self, widget):
         bookmarks = self.bookmark_manager.get_all_bookmarks()
 
@@ -2010,11 +1768,7 @@ class WebBrowser(Gtk.Window):
         # Fill the liststore with bookmarks
         for bookmark in bookmarks:
             date_str = time.strftime("%Y-%m-%d %H:%M", time.localtime(bookmark.date_added))
-            adder = "🌐 "
-            #print(bookmark.url[0])
-            if bookmark.url[0]=="/" or bookmark.url.startswith("file://"):
-                adder="📁 "
-            liststore.append([f"{adder} {bookmark.title}", bookmark.url, date_str, bookmark])
+            liststore.append([bookmark.title, bookmark.url, date_str, bookmark])
 
         # Create TreeView
         treeview = Gtk.TreeView(model=liststore)
@@ -2216,9 +1970,6 @@ class WebBrowser(Gtk.Window):
             url_label = Gtk.Label(label="URL:")
             url_entry = Gtk.Entry()
             url_entry.set_text(bookmark.url)
-            if self.win2.current_path != self.url_entry.get_text():
-                # self.win2.current_path = self.url_entry.get_text()
-                self.win2.load_directory(self.url_entry.get_text())
             url_box.pack_start(url_label, False, False, 0)
             url_box.pack_start(url_entry, True, True, 0)
             box.pack_start(url_box, False, False, 0)
@@ -2289,22 +2040,6 @@ class WebBrowser(Gtk.Window):
             self.load_url(url)
             treeview.get_toplevel().response(Gtk.ResponseType.CLOSE)
 
-    def on_history_dialog_visit(self, button, treeview):
-        selection = treeview.get_selection()
-        model, iter = selection.get_selected()
-
-        if iter is not None:
-            # Get the selected path
-            path = model.get_path(iter)
-            # Get the index from the path (first element of the tuple)
-            index = path.get_indices()[0]
-
-            self.skipHistory = True
-            self.histPoint = len(self.history) - 1 - index
-            url = model.get_value(iter, 1)
-            self.load_url(url)
-            treeview.get_toplevel().response(Gtk.ResponseType.CLOSE)
-
         # Context menu handlers
 
     def on_bookmark_context_visit(self, menuitem, treeview):
@@ -2369,7 +2104,6 @@ class WebBrowser(Gtk.Window):
         else:
             # Default desktop user agent
             desktop_user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-            #desktop_user_agent = "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
             settings.set_property("user-agent", desktop_user_agent)
             self.statusbar.push(self.statusbar_context, "Using desktop user agent")
 
@@ -2663,20 +2397,15 @@ class WebBrowser(Gtk.Window):
         """Track scroll events to trigger memory cleanup after significant scrolling"""
         # Get current scroll position
         self.scroll +=1
-        print(self.scroll,self.webview.get_uri())
+        print(self.scroll)
         if self.scroll==10:
             self.scroll=0
             #self.last_cleanup_position = y
-            #self.perform_memory_cleanup()
-            self.url_entry.set_text(self.webview.get_uri())
-            if self.win2.current_path != self.url_entry.get_text():
-                # self.win2.current_path = self.url_entry.get_text()
-                self.win2.load_directory(self.url_entry.get_text())
-            #self.win2.load_directory(self.url_entry.get_text())
+            self.perform_memory_cleanup()
         return False  # Allow event propagation
 
     # Add this function to clean up memory after scrolling
-    def cleanup_scrolled_content(self, widget):
+    def cleanup_scrolled_content(self):
         """Clean up memory after significant scrolling"""
         # Run garbage collection
         try:
@@ -2720,7 +2449,7 @@ class WebBrowser(Gtk.Window):
         return False  # One-time execution
 
     # Add this function for periodic memory cleanup
-    def perform_memory_cleanup(self, widget):
+    def perform_memory_cleanup(self):
         """Perform periodic memory cleanup"""
         # Only clean if the browser is still running
         if not self.get_realized():
@@ -2747,183 +2476,13 @@ class WebBrowser(Gtk.Window):
 
         return True  # Continue the timer
 
-    def fix_youtube_seeking(self, webview):
-        # This script detects seeking events and helps prevent freezing
-        js = """
-        if (window.location.hostname.includes('youtube.com')) {
-            // Function to patch YouTube player
-            function patchYouTubePlayer() {
-                const videoElement = document.querySelector('video');
-                if (!videoElement) return false;
-
-                // Store original seeking methods
-                const originalSeek = videoElement.currentTime;
-
-                // Create a proxy for currentTime to handle seeking better
-                Object.defineProperty(videoElement, 'currentTime', {
-                    get: function() {
-                        return originalSeek;
-                    },
-                    set: function(newTime) {
-                        // Before seeking - prepare video element
-                        this.style.opacity = '0.99';
-
-                        // Set actual time
-                        originalSeek = newTime;
-
-                        // After seeking - force refresh
-                        setTimeout(() => {
-                            this.style.opacity = '1';
-                            // Force layout recalculation
-                            void this.offsetHeight;
-                        }, 50);
-
-                        return newTime;
-                    }
-                });
-
-                // Also monitor progress bar clicks
-                const progressBar = document.querySelector('.ytp-progress-bar');
-                if (progressBar) {
-                    progressBar.addEventListener('mousedown', function() {
-                        videoElement.style.willChange = 'transform';
-                    });
-
-                    progressBar.addEventListener('mouseup', function() {
-                        setTimeout(() => {
-                            videoElement.style.willChange = 'auto';
-                        }, 500);
-                    });
-                }
-
-                return true;
-            }
-
-            // Try immediately and retry with interval
-            if (!patchYouTubePlayer()) {
-                const checkInterval = setInterval(() => {
-                    if (patchYouTubePlayer()) {
-                        clearInterval(checkInterval);
-                    }
-                }, 500);
-            }
-        }
-        """
-
-        webview.connect("load-changed", lambda webview, event:
-        webview.run_javascript(js, None, None, None)
-        if event == WebKit2.LoadEvent.FINISHED else None)
-
-    def inject_youtube_optimizer(self, webview):
-        js = """
-        // Run when page is loaded
-        if (window.location.hostname.includes('youtube.com')) {
-            // Function to optimize YouTube player
-            function optimizeYouTube() {
-                // Find the video player
-                const video = document.querySelector('video');
-                if (!video) return;
-
-                // Improve seeking behavior - force repaint
-                video.addEventListener('seeking', function() {
-                    // Trick to force a repaint when seeking
-                    video.style.willChange = 'transform';
-                    setTimeout(() => { video.style.willChange = 'auto'; }, 0);
-
-                    // Disable animations during seeking
-                    document.documentElement.style.setProperty('--yt-animation-duration', '0');
-                    setTimeout(() => {
-                        document.documentElement.style.setProperty('--yt-animation-duration', '');
-                    }, 1000);
-                });
-
-                // Reduce UI updates during playback
-                const playerApi = document.getElementById('movie_player') || {};
-                if (playerApi.setAutonavState) {
-                    playerApi.setAutonavState(0); // Disable autoplay next
-                }
-
-                // Disable high-resource features
-                const disableFeatures = function() {
-                    // Remove comments section and recommended videos
-                    const sections = [
-                        'ytd-watch-next-secondary-results-renderer',
-                        'ytd-comments',
-                        '#secondary'
-                    ];
-
-                    sections.forEach(selector => {
-                        const element = document.querySelector(selector);
-                        if (element) element.style.display = 'none';
-                    });
-                };
-
-                // Run optimization after delay
-                setTimeout(disableFeatures, 1000);
-
-                // Improve video rendering performance
-                video.style.transform = 'translateZ(0)';
-                video.style.backfaceVisibility = 'hidden';
-            }
-
-            // Observer to run optimization when player becomes available
-            const observer = new MutationObserver(function() {
-                if (document.querySelector('video')) {
-                    optimizeYouTube();
-                    observer.disconnect();
-                }
-            });
-
-            // Start observing for video element
-            observer.observe(document.body, { childList: true, subtree: true });
-
-            // Also try to run directly
-            optimizeYouTube();
-        }
-        """
-
-        # Inject this script when page loads
-        webview.connect("load-changed", lambda webview, event:
-        webview.run_javascript(js, None, None, None)
-        if event == WebKit2.LoadEvent.FINISHED else None)
-
-    # Create a content blocker to disable non-essential elements on YouTube
-    def setup_youtube_content_blocker(self, webview):
-        content_manager = webview.get_user_content_manager()
-
-        # Block unnecessary YouTube scripts and elements that might interfere with playback
-        blocker_rule = """
-        [
-            {
-                "trigger": {
-                    "url-filter": ".*youtube\\.com\\/s\\/player\\/.*\\.js",
-                    "resource-type": ["script"]
-                },
-                "action": {
-                    "type": "css-display-none",
-                    "selector": "ytd-watch-next-secondary-results-renderer, ytd-comments, #secondary"
-                }
-            },
-            {
-                "trigger": {
-                    "url-filter": ".*"
-                },
-                "action": {
-                    "type": "css-display-none",
-                    "selector": ".ytp-endscreen-content, .ytp-pause-overlay"
-                }
-            }
-        ]
-        """
-
-        #content_manager.add_filter(WebKit2.UserContentFilter.new("youtube-optimizer", blocker_rule))
-
 def main():
     # Enable GTK application to use X11 backend for hardware acceleration
     os.environ['GDK_BACKEND'] = 'x11'
 
     # Enable WebKit hardware acceleration
     os.environ['WEBKIT_FORCE_ACCELERATED_COMPOSITING'] = '1'
+
     # Initialize GTK
     Gtk.init(None)
 
