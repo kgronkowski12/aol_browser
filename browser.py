@@ -87,7 +87,12 @@ class BookmarkManager:
 class WebBrowser(Gtk.Window):
     def __init__(self):
         Gtk.Window.__init__(self, title="GTK Web Browser")
+
         self.set_default_size(1200, 800)
+
+        self.set_resizable(False)
+
+
         self.connect("destroy", Gtk.main_quit)
         self.connect("button-press-event", self.on_button_press)
         self.connect("notify::uri", self.on_uri_changed)
@@ -140,10 +145,19 @@ class WebBrowser(Gtk.Window):
         #vbox.override_background_color(Gtk.StateType.NORMAL, Gdk.RGBA(1, 1, 1, 0.65))
 
         # Create WebView with optimized settings
-        self.webview = self.create_optimized_webview()
-        self.setup_youtube_content_blocker(self.webview)
-        self.inject_youtube_optimizer(self.webview)
-        self.fix_youtube_seeking(self.webview)
+        self.webview = self.create_optimized_webview(False)
+        self.webview_org = self.webview
+        self.yt_embed = self.create_optimized_webview(True)
+        self.tabs = []
+        for c in range(3):
+            b = self.create_optimized_webview(True)
+            b.connect("load-changed", self.on_load_changed)
+            b.load_uri("https://www.google.com")
+            self.tabs.append(b)
+
+        #self.setup_youtube_content_blocker(self.webview)
+        #self.inject_youtube_optimizer(self.webview)
+        #self.fix_youtube_seeking(self.webview)
         self.save_path = "/home/sheeye/Videos/Download/"
         context = self.webview.get_context()
         context.connect("download-started", self.on_download_started)
@@ -158,6 +172,8 @@ class WebBrowser(Gtk.Window):
 
         # Second Toolbar (Navigation)
         self.create_navigation_toolbar(vbox)
+
+        self.create_tabs(vbox)
 
 
 
@@ -182,8 +198,25 @@ class WebBrowser(Gtk.Window):
         scrolled_window = Gtk.ScrolledWindow()
         scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scrolled_window.add(self.webview)
+        scrolled_window2 = Gtk.ScrolledWindow()
+        scrolled_window2.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scrolled_window2.add(self.yt_embed)
+        self.embed_view = scrolled_window2
+        self.normie_view = scrolled_window
+
+        self.yt_embed.load_uri("https://www.youtube.com")
+
         self.allWeb = scrolled_window
         vbox.pack_start(scrolled_window, True, True, 0)
+        vbox.pack_start(scrolled_window2, True, True, 0)
+
+        self.tabs_views = []
+        for c in range(3):
+            scrolled_window2 = Gtk.ScrolledWindow()
+            scrolled_window2.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+            scrolled_window2.add(self.tabs[c])
+            vbox.pack_start(scrolled_window2, True, True, 0)
+            self.tabs_views.append(scrolled_window2)
 
         # Status Bar
         self.statusbar = Gtk.Statusbar()
@@ -220,6 +253,35 @@ class WebBrowser(Gtk.Window):
         self.prefetch_dns()
         self.setup_content_filters()
         self.setup_script_blocking()
+        self.webview=self.yt_embed
+        self.setup_content_filters()
+        self.setup_script_blocking()
+        self.webview=self.webview_org
+        self.changed=1
+
+    def create_tabs(self, vbox):
+
+        toolbar2 = Gtk.Toolbar()
+        toolbar2.set_style(Gtk.ToolbarStyle.ICONS)
+
+        # Add "Address:" label
+        self.tab_labels = []
+        for c in range(4):
+            sort_sep =  Gtk.SeparatorToolItem()
+            toolbar2.insert(sort_sep, -1)
+            address_label_item = Gtk.ToolItem()
+            address_label = Gtk.Label(label="google.com")
+            self.tab_labels.append(address_label)
+            address_label.set_markup(f"{c+1}. www.google.com")
+            address_label_item.add(address_label)
+            toolbar2.insert(address_label_item, -1)
+        sort_sep = Gtk.SeparatorToolItem()
+        toolbar2.insert(sort_sep, -1)
+
+        self.tab_menu = toolbar2
+
+        vbox.pack_start(toolbar2, False, True, 0)
+
 
     def on_download_started(self, webview, download):
         download.connect("decide-destination", self.on_decide_destination)
@@ -320,16 +382,17 @@ class WebBrowser(Gtk.Window):
         menu.show_all()
         menu.popup_at_pointer(None)
 
-    def create_optimized_webview(self):
+    def create_optimized_webview(self,complementary):
         # Create WebView with our context
         webview = WebKit2.WebView.new_with_context(self.context)
 
         # Connect signals
-        webview.connect("load-changed", self.on_load_changed)
-        webview.connect("notify::uri", self.on_uri_changed)
-        webview.connect("decide-policy", self.on_decide_policy)
-        webview.connect("notify::title", self.on_title_changed)
-        webview.connect("button-press-event", self.on_button_press)
+        if not complementary:
+            webview.connect("load-changed", self.on_load_changed)
+            webview.connect("notify::uri", self.on_uri_changed)
+            webview.connect("decide-policy", self.on_decide_policy)
+            webview.connect("notify::title", self.on_title_changed)
+            webview.connect("button-press-event", self.on_button_press)
 
         # Get settings object
         settings = webview.get_settings()
@@ -418,6 +481,10 @@ class WebBrowser(Gtk.Window):
         def resolve_domains():
             for domain in common_domains:
                 self.context.prefetch_dns(domain)
+
+    def res_window(self,size):
+        print(size)
+        self.resize(size[0],size[1])
 
 
     def create_menu_bar(self, vbox):
@@ -549,32 +616,120 @@ class WebBrowser(Gtk.Window):
         separator3 = Gtk.SeparatorMenuItem()
         view_menu.append(separator3)
 
-        bookmarks_item = Gtk.MenuItem(label="Opacity 100%")
-        bookmarks_item.connect("activate",  lambda x: self.set_opp(1))
-        view_menu.append(bookmarks_item)
-        bookmarks_item = Gtk.MenuItem(label="Opacity 95%")
-        bookmarks_item.connect("activate",  lambda x: self.set_opp(0.95))
-        view_menu.append(bookmarks_item)
-        bookmarks_item = Gtk.MenuItem(label="Opacity 90%")
-        bookmarks_item.connect("activate",  lambda x: self.set_opp(0.9))
-        view_menu.append(bookmarks_item)
-        bookmarks_item = Gtk.MenuItem(label="Opacity 80%")
-        bookmarks_item.connect("activate",  lambda x: self.set_opp(0.8))
-        view_menu.append(bookmarks_item)
-        bookmarks_item = Gtk.MenuItem(label="Opacity 70%")
-        bookmarks_item.connect("activate",  lambda x: self.set_opp(0.7))
-        view_menu.append(bookmarks_item)
-        bookmarks_item = Gtk.MenuItem(label="Opacity 50%")
-        bookmarks_item.connect("activate",  lambda x: self.set_opp(0.5))
-        view_menu.append(bookmarks_item)
-        bookmarks_item = Gtk.MenuItem(label="Opacity 20%")
-        bookmarks_item.connect("activate",  lambda x: self.set_opp(0.2))
-        view_menu.append(bookmarks_item)
-        bookmarks_item = Gtk.MenuItem(label="Opacity 0%")
-        bookmarks_item.connect("activate",  lambda x: self.set_opp(0.))
-        view_menu.append(bookmarks_item)
+        user_agent_menu = Gtk.Menu()
+        user_agent_item = Gtk.MenuItem(label="Size")
+        user_agent_item.set_submenu(user_agent_menu)
+
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent.set_label("1200x800")
+        self.desktop_agent.connect("toggled", lambda x: self.res_window([1200,800]))
+        user_agent_menu.append(self.desktop_agent)
+
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent.set_label("1200x1000")
+        self.desktop_agent.connect("toggled", lambda x: self.res_window([1200,1000]))
+        user_agent_menu.append(self.desktop_agent)
+
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent.set_label("1600x1000")
+        self.desktop_agent.connect("toggled", lambda x: self.res_window([1600,1000]))
+        user_agent_menu.append(self.desktop_agent)
+
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent.set_label("1860x1000")
+        self.desktop_agent.connect("toggled", lambda x: self.res_window([1880,1000]))
+        user_agent_menu.append(self.desktop_agent)
+
+
+
+        view_menu.append(user_agent_item)
+
+        separator3 = Gtk.SeparatorMenuItem()
+        view_menu.append(separator3)
+
+
+
+
+        user_agent_menu = Gtk.Menu()
+        user_agent_item = Gtk.MenuItem(label="Opacity")
+        user_agent_item.set_submenu(user_agent_menu)
+
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent.set_label("100%")
+        self.desktop_agent.connect("activate",  lambda x: self.set_opp(1))
+        user_agent_menu.append(self.desktop_agent)
+
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent.set_label("99%")
+        self.desktop_agent.connect("activate", lambda x: self.set_opp(0.99))
+        user_agent_menu.append(self.desktop_agent)
+
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent.set_label("98%")
+        self.desktop_agent.connect("activate", lambda x: self.set_opp(0.98))
+        user_agent_menu.append(self.desktop_agent)
+
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent.set_label("97%")
+        self.desktop_agent.connect("activate", lambda x: self.set_opp(0.97))
+        user_agent_menu.append(self.desktop_agent)
+
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent.set_label("95%")
+        self.desktop_agent.set_active(True)  # Default to enabled
+        self.desktop_agent.connect("activate", lambda x: self.set_opp(0.95))
+        user_agent_menu.append(self.desktop_agent)
+
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent.set_label("90%")
+        self.desktop_agent.connect("activate", lambda x: self.set_opp(0.90))
+        user_agent_menu.append(self.desktop_agent)
+
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent.set_label("85%")
+        self.desktop_agent.connect("activate", lambda x: self.set_opp(0.85))
+        user_agent_menu.append(self.desktop_agent)
+
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent.set_label("80%")
+        self.desktop_agent.connect("activate", lambda x: self.set_opp(0.8))
+        user_agent_menu.append(self.desktop_agent)
+
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent.set_label("70%")
+        self.desktop_agent.connect("activate", lambda x: self.set_opp(0.7))
+        user_agent_menu.append(self.desktop_agent)
+
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent.set_label("50%")
+        self.desktop_agent.connect("activate", lambda x: self.set_opp(0.5))
+        user_agent_menu.append(self.desktop_agent)
+
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent.set_label("25%")
+        self.desktop_agent.connect("activate", lambda x: self.set_opp(0.25))
+        user_agent_menu.append(self.desktop_agent)
+
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent.set_label("10%")
+        self.desktop_agent.connect("activate", lambda x: self.set_opp(0.1))
+        user_agent_menu.append(self.desktop_agent)
+
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent.set_label("0%")
+        self.desktop_agent.connect("activate", lambda x: self.set_opp(0))
+        user_agent_menu.append(self.desktop_agent)
+
+
+
+        view_menu.append(user_agent_item)
 
         menubar.append(view_item)
+
+
+
+
+
 
         # Bookmarks Menu
         bookmarks_menu = Gtk.Menu()
@@ -1191,6 +1346,7 @@ class WebBrowser(Gtk.Window):
         toolbar = Gtk.Toolbar()
         toolbar.set_style(Gtk.ToolbarStyle.ICONS)
         labelToolbar = Gtk.Toolbar
+        self.nav_bar = toolbar
         vbox.pack_start(toolbar, False, False, 0)
 
         # Back Button
@@ -1273,6 +1429,8 @@ class WebBrowser(Gtk.Window):
     def on_new_window(self, widget):
         browser = WebBrowser()
         browser.show_all()
+        for c in browser.tabs_views:
+            c.hide()
 
     def on_new_tab(self, widget):
         self.statusbar.push(self.statusbar_context, "New Tab functionality not implemented")
@@ -1337,6 +1495,7 @@ class WebBrowser(Gtk.Window):
         about_dialog.destroy()
 
     def on_back_clicked(self, widget):
+        urli = self.url_entry.get_text()
         self.histPoint+=1
 
         if self.histPoint>=len(self.history):
@@ -1349,6 +1508,7 @@ class WebBrowser(Gtk.Window):
             if c == 0 or self.history[c] != self.history[c - 1]:
                 newHist.append(self.history[c])
         self.history = newHist
+        new_urli = self.url_entry.get_text()
         #self.win2.load_directory(self.history[len(self.history)-1-self.histPoint])
         #self.skipHistory = True
         #self.win2.current_path=self.url_entry.get_text()
@@ -1368,6 +1528,7 @@ class WebBrowser(Gtk.Window):
                 self.win2.go_back()
 
     def on_forward_clicked(self, widget):
+        urli = self.url_entry.get_text()
         self.histPoint-=1
         if self.histPoint<0:
             self.histPoint=0
@@ -1380,10 +1541,13 @@ class WebBrowser(Gtk.Window):
         if self.win2.current_path!=self.url_entry.get_text():
             #self.win2.current_path = self.url_entry.get_text()
             self.win2.load_directory(self.win2.current_path)
+            print("DEB 1")
         newHist = []
         for c in range(len(self.history)):
             if c == 0 or self.history[c] != self.history[c - 1]:
                 newHist.append(self.history[c])
+        self.history = newHist
+        new_urli = self.url_entry.get_text()
         if False:
             if not self.fileView:
                 if self.webview.can_go_forward():
@@ -1394,12 +1558,14 @@ class WebBrowser(Gtk.Window):
                     self.win2.history_pos += 1
                     path = self.win2.history[self.win2.history_pos]
                     self.win2.load_directory(path)
+                    print("DEB 2")
 
     def on_refresh_clicked(self, widget):
         if not self.fileView:
             self.webview.reload()
         else:
-            self.win2.load_directory(self.win2.current_path)
+            self.win2.on_refresh_clicked(None)
+            #self.win2.load_directory(self.win2.current_path)
 
     def on_button_press(self, widget, event):
         button_num = event.button
@@ -1411,6 +1577,7 @@ class WebBrowser(Gtk.Window):
         elif button_num == 9:
             self.on_forward_clicked(None)
             return True
+        print("Nope",button_num)
 
         return False
 
@@ -1429,6 +1596,7 @@ class WebBrowser(Gtk.Window):
             self.win2.history_pos = len(self.win2.history) - 1
 
             self.win2.load_directory(home)
+            print("DEB 3")
             #self.back_button.set_sensitive(len(self.win2.history) > 1)
             #self.forward_button.set_sensitive(self.win2.history_pos < len(self.win2.history) - 1)
         #self.webview.override_background_color(Gtk.StateType.NORMAL, Gdk.RGBA(0, 0, 0, 0.65))
@@ -1440,6 +1608,7 @@ class WebBrowser(Gtk.Window):
         else:
             url = self.url_entry.get_text()
             self.win2.load_directory(url)
+            print("DEB 4")
 
 
     def on_go_clicked(self, widget):
@@ -1449,9 +1618,68 @@ class WebBrowser(Gtk.Window):
         else:
             url = self.url_entry.get_text()
             self.win2.load_directory(url)
+            print("DEB 5")
 
+    def update_tab_names(self):
+        for c in range(4):
+            name = ""
+            bold_start = ""
+            bold_end = ""
+            icona = ""
+            if c==0:
+                name=self.webview_org.get_uri()
+                if self.webview==self.webview_org:
+                    bold_start="<b>"
+                    bold_end="</b>"
+            else:
+                name=self.tabs[c-1].get_uri()
+                if self.webview==self.tabs[c-1]:
+                    bold_start="<b>"
+                    bold_end="</b>"
+            if name.startswith("file://") or name.startswith("/"):
+                icona = "📁 "
+            else:
+                icona = "🌐 "
+                new_name = ""
+                name_parts = name.split("/")
+                if bold_start=="":
+                    if len(name)>25:
+                        name=name[:25]
+                else:
+                    if len(name)>35:
+                        name=name[:35]
+
+
+
+            self.tab_labels[c].set_markup(f"{bold_start}{c + 1}. {icona}{name}{bold_end}")
+
+    def fileViewSwitch(self):
+        url = self.webview.get_uri()
+        if url.startswith("/") or url.startswith("file://"):
+            self.fileView=True
+        else:
+            self.fileView=False
+
+        if(self.fileView):
+            self.win2.load_directory(url)
+            self.win2.main_vertical_box.show_all()
+            if self.webview==self.webview_org:
+                self.normie_view.hide()
+            else:
+                for c in range(3):
+                    if self.webview==self.tabs[c]:
+                        self.tabs_views[c].hide()
+        else:
+            if self.webview == self.webview_org:
+                self.normie_view.show_all()
+            else:
+                for c in range(3):
+                    if self.webview == self.tabs[c]:
+                        self.tabs_views[c].show_all()
+            self.win2.main_vertical_box.hide()
 
     def load_url(self, url):
+        self.set_resizable(True)
         if url.startswith(("/")):
             url="file://"+url
         elif not url.startswith("file://"):
@@ -1476,19 +1704,27 @@ class WebBrowser(Gtk.Window):
             if url.__contains__("yewtu.be"):
                 url = url.replace("yewtu.be", "inv.nadeko.net")
         self.webview.load_uri(url)
-        if url.startswith("file://") and (len(url)<6 or not url[len(url)-5:].__contains__(".")):
+        #if self.webview==self.webview_org:
+        if self.forceWeb:
+            self.fileView=False
+        elif url.startswith("file://") and (len(url)<6 or not url[len(url)-5:].__contains__(".")):
             self.fileView=True
         else:
             self.fileView=False
-        if self.forceWeb:
-            self.fileView=False
-            self.forceWeb=False
+        self.forceWeb=False
         print(self.fileView)
         newHist = []
         for c in range(len(self.history)):
             if c == 0 or self.history[c] != self.history[c - 1]:
                 newHist.append(self.history[c])
+        self.history = newHist
         self.on_bookmark_button_toggled(None)
+        if self.webview!=self.webview_org:
+            self.normie_view.hide()
+        self.update_tab_names()
+        self.fileViewSwitch()
+
+
 
         #self.webview.override_background_color(Gtk.StateType.NORMAL, Gdk.RGBA(0, 0, 0, 0.65))
 
@@ -1509,6 +1745,15 @@ class WebBrowser(Gtk.Window):
 
     def on_uri_changed(self, web_view, uri2):
         uri = web_view.get_uri()
+        new_uri = uri
+        if uri.__contains__("watch?"):
+            if uri.__contains__("&"):
+                new_uri=uri.split("&")[0]
+            new_uri=new_uri.replace("watch?v=","/embed/")
+            new_uri = new_uri.replace("/m.", "/www.")
+        if uri.__contains__("old.reddit"):
+            new_uri = new_uri.replace("old.", "")
+        self.yt_embed.load_uri(new_uri)
         if not self.skipHistory:
             url = web_view.get_uri()
             if url.endswith("/"):
@@ -1520,24 +1765,33 @@ class WebBrowser(Gtk.Window):
             for c in range(len(self.history)):
                 if c==0 or self.history[c]!=self.history[c-1]:
                     newHist.append(self.history[c])
-            self.history = newHist
+            #self.history = newHist
             #self.history = list(dict.fromkeys(self.history))
         #print(self.history)
         self.url_entry.set_text(uri)
-        if self.win2.current_path != self.url_entry.get_text():
-            #self.win2.current_path = self.url_entry.get_text()
-            self.win2.load_directory(self.url_entry.get_text())
+        #if self.win2.current_path != self.url_entry.get_text():
+        #    #self.win2.current_path = self.url_entry.get_text()
+        #    #self.win2.load_directory(self.url_entry.get_text())
+        #    #print("DEB 6")
         #self.win2.load_directory(uri)
         #print(uri)
         #print("of uri was loaded!!!",uri)
         self.skipHistory = False
-        if self.win2!="":
+
+        self.update_tab_names()
+
+
+        #if self.win2!="":
             #self.win2.load_directory(self.url_entry.get_text())
-            self.win2.current_path=self.url_entry.get_text()
+            #self.win2.current_path=self.url_entry.get_text()
+            #print(self.url_entry.get_text())
+            #print("SETTO - 7")
             #self.win2.on_refresh_clicked(None)
             #print("win2 loaded",self.win2.current_path)
 
     def on_load_changed(self, web_view, load_event):
+        self.update_tab_names()
+        self.fileViewSwitch()
         if load_event == WebKit2.LoadEvent.STARTED:
             pixbuf = GdkPixbuf.PixbufAnimation.new_from_file("aol_loading_image.gif")
             # pixbuf = pixbuf.scale_simple(38, 38, GdkPixbufAnimation.InterpType.BILINEAR)
@@ -1550,6 +1804,7 @@ class WebBrowser(Gtk.Window):
             if self.win2.current_path != self.url_entry.get_text():
                 # self.win2.current_path = self.url_entry.get_text()
                 self.win2.load_directory(self.url_entry.get_text())
+                print("DEB 8")
             #self.win2.load_directory(self.url_entry.get_text())
 
         elif load_event == WebKit2.LoadEvent.COMMITTED:
@@ -1566,15 +1821,18 @@ class WebBrowser(Gtk.Window):
                 if self.win2.current_path != self.url_entry.get_text():
                     # self.win2.current_path = self.url_entry.get_text()
                     self.win2.load_directory(self.url_entry.get_text())
+                    print("DEB 9")
                 #self.win2.load_directory(self.url_entry.get_text())
 
                 url = uri
 
-                if url.__contains__("reddit.com"):
+                if url.__contains__("reddit.com") and not url.__contains__("/media?") and not url.__contains__("preview"):
                     if not url.__contains__("old.reddit.com"):
                         url = url.replace("reddit.com", "old.reddit.com")
                         url = url.replace("www.", "")
                         self.load_url(url)
+                if url.__contains__("https://old.reddit.com/r/funny/comments/media/nice_hat/?"):
+                    url="https://old.reddit.com"
                 if False:
                     if url.__contains__("youtube.com"):
                         url = url.replace("youtube.com", "inv.nadeko.net")
@@ -1587,6 +1845,7 @@ class WebBrowser(Gtk.Window):
                 if self.win2.current_path != self.url_entry.get_text():
                     # self.win2.current_path = self.url_entry.get_text()
                     self.win2.load_directory(self.url_entry.get_text())
+                    print("DEB 10")
                 #self.win2.load_directory(self.url_entry.get_text())
 
 
@@ -1601,6 +1860,7 @@ class WebBrowser(Gtk.Window):
             if self.win2.current_path != self.url_entry.get_text():
                 # self.win2.current_path = self.url_entry.get_text()
                 self.win2.load_directory(self.url_entry.get_text())
+                print("DEB 11")
             #self.win2.load_directory(self.url_entry.get_text())
             self.statusbar.hide()
             # Scale pixbuf if needed: pixbuf = pixbuf.scale_simple(16, 16, GdkPixbuf.InterpType.BILINEAR)
@@ -1614,6 +1874,8 @@ class WebBrowser(Gtk.Window):
             if self.win2.current_path != self.url_entry.get_text():
                 #self.win2.current_path = self.url_entry.get_text()
                 self.win2.load_directory(self.win2.current_path)
+                print("DEB 12")
+                #print("huh")
             #self.win2.current_path = self.url_entry.get_text()
             #self.win2.load_directory(self.url_entry.get_text())
 
@@ -1741,6 +2003,7 @@ class WebBrowser(Gtk.Window):
             if self.win2.current_path != self.url_entry.get_text():
                 # self.win2.current_path = self.url_entry.get_text()
                 self.win2.load_directory(self.url_entry.get_text())
+                PRINT("deb 13")
             url_box.pack_start(url_label, False, False, 0)
             url_box.pack_start(url_entry, True, True, 0)
             box.pack_start(url_box, False, False, 0)
@@ -2352,6 +2615,8 @@ class WebBrowser(Gtk.Window):
         print(navigation_action.get_request().get_uri())
         browser = self.create_new_browser_window(navigation_action.get_request().get_uri())
         browser.show_all()
+        for c in browser.tabs_views:
+            c.hide()
         browser.win2.main_vertical_box.hide()
 
         #self.webview.load_uri(navigation_action.get_request().get_uri())
@@ -2931,8 +3196,13 @@ def main():
     browser = WebBrowser()
     browser.override_background_color(Gtk.StateType.NORMAL, Gdk.RGBA(0, 0, 0, 0.65))
     browser.show_all()
+    browser.embed_view.hide()
     browser.statusbar.hide()
     browser.win2.main_vertical_box.hide()
+    for c in browser.tabs_views:
+        c.hide()
+    browser.tab_menu.hide()
+    browser.resize(1200, 700)
 
     Gtk.main()
 

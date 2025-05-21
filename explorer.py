@@ -1707,7 +1707,7 @@ class FileExplorer(Gtk.Window):
             newHist = []
             transient = self.transient
             for c in range(len(transient.history)):
-                if c == 0 or transient.history[c] != transient.history[c - 1]:
+                if c == 0 or (transient.history[c] != transient.history[c - 1] and transient.history[c]+"/" != transient.history[c - 1] and transient.history[c] != transient.history[c - 1]+"/"):
                     newHist.append(transient.history[c])
             transient.history = newHist
 
@@ -1754,6 +1754,8 @@ class FileExplorer(Gtk.Window):
         try:
             # Update path
             self.current_path = path
+            if self.transient.webview!=self.transient.webview_org:
+                self.transient.webview.load_uri("file://"+path)
             self.path_bar.set_text(self.current_path)
 
             # Play the folder opened sound only if this is not a refresh
@@ -1775,6 +1777,12 @@ class FileExplorer(Gtk.Window):
 
             # Get directory contents
             items = []
+            while not os.path.isdir(path):
+                parts = path.split("/")
+                new_path=""
+                for c in range(length(parts)-1):
+                    new_path+="/"+c
+                path = new_path
             for item in os.listdir(path):
                 full_path = os.path.join(path, item)
                 if (not os.path.basename(full_path).startswith('.') or self.show_hidden) and (not os.path.basename(full_path).endswith('~') or self.show_backup):  # Hide hidden files
@@ -1809,8 +1817,14 @@ class FileExplorer(Gtk.Window):
                 items.sort(key=lambda x: (not os.path.isdir(x[1]), x[3]), reverse=self.sort_reverse)
 
             # Add items to the flow box
+            b = 0
             for name, full_path, _, _, _ in items:
                 self.add_item(name, full_path)
+                self.flow_box.show_all()
+                self.update_status(f"{b}/{len(items)} items loaded")
+                b+=1
+                while Gtk.events_pending():
+                    Gtk.main_iteration()
 
             # Show all the widgets
             self.flow_box.show_all()
@@ -1849,6 +1863,8 @@ class FileExplorer(Gtk.Window):
         """Convert video or animated image to a GIF for preview."""
 
         file_size = os.path.getsize(path)
+        file_hash = hashlib.md5(path.encode()).hexdigest()
+        test_path = os.path.join("/home/sheeye/Videos/Cache", f"preview_{file_hash}_{self.icon_size}.lck")
         if file_size > 300 * 1024 * 1024:  # 100MB
             # Skip animation for large files and use static thumbnail
             print(f"Large video file detected ({file_size / (1024 * 1024):.1f} MB): using static thumbnail")
@@ -1857,41 +1873,41 @@ class FileExplorer(Gtk.Window):
         size=file_size
         fps = 10
         secs = 6
-
-        if size> 6 * 1024 * 1024:
+        if size> 56 * 1024 * 1024:
             fps=5
             secs=6
 
-        if size> 10 * 1024 * 1024:
+        if size> 100 * 1024 * 1024:
             fps=4
             secs=5
 
-        if size> 18 * 1024 * 1024:
+        if size> 138 * 1024 * 1024:
             fps=3
             secs=4
 
-        if size> 23 * 1024 * 1024:
+        if size> 183 * 1024 * 1024:
             fps=3
             secs=3
 
-        if size> 26 * 1024 * 1024:
+        if size> 220 * 1024 * 1024:
             fps=2
             secs=3
 
-        if size > 29 * 1024 * 1024:
+        if size > 245 * 1024 * 1024:
             fps = 1
             secs = 3
 
-        if size > 33 * 1024 * 1024:
+        if size > 275 * 1024 * 1024:
             fps = 1
             secs = 2
 
         #fps=10 t=3
+        secs = str(secs)
 
         try:
             # Create a unique hash for the file to avoid name collisions
-            file_hash = hashlib.md5(path.encode()).hexdigest()
-            gif_path = os.path.join(tempfile.gettempdir(), f"preview_{file_hash}.gif")
+            #file_hash = hashlib.md5(path.encode()).hexdigest()
+            gif_path = os.path.join("/home/sheeye/Videos/Cache", f"preview_{file_hash}_{self.icon_size}.gif")
 
             # Check if we already have a cached version
             if os.path.exists(gif_path) and os.path.getmtime(gif_path) > os.path.getmtime(path):
@@ -1904,6 +1920,13 @@ class FileExplorer(Gtk.Window):
                     # If it's static, we'll recreate it
                 except Exception:
                     pass
+            if os.path.exists(test_path):
+                print("Already tried, exiting...")
+                return None
+
+            print("making file")
+            t = open(test_path, "w+")
+            t.close()
 
             content_type, _ = mimetypes.guess_type(path)
 
@@ -1916,7 +1939,7 @@ class FileExplorer(Gtk.Window):
             if content_type and content_type.startswith("video/"):
                 # For videos, extract a short segment and convert to GIF
                 # Two-step process for better quality
-                palette_path = os.path.join(tempfile.gettempdir(), f"palette_{file_hash}.png")
+                palette_path = os.path.join("/home/sheeye/Videos/Cache", f"palette_{file_hash}.png")
 
                 # Step 1: Generate palette for better quality
                 palette_cmd = [
@@ -1926,12 +1949,16 @@ class FileExplorer(Gtk.Window):
                     palette_path
                 ]
 
+                print("1")
+
                 subprocess.run(
                     palette_cmd,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    timeout=10
+                    timeout=20
                 )
+
+                print("2")
 
                 # Step 2: Create GIF using the palette
                 if os.path.exists(palette_path):
@@ -1939,7 +1966,7 @@ class FileExplorer(Gtk.Window):
                         "ffmpeg", "-y",
                         "-i", path,
                         "-i", palette_path,
-                        "-t", secons,  # 3 seconds of video
+                        "-t", secs,  # 3 seconds of video
                         "-filter_complex", f"fps={fps},scale={self.icon_size}:-1:flags=lanczos[x];[x][1:v]paletteuse",
                         gif_path
                     ]
@@ -1948,8 +1975,10 @@ class FileExplorer(Gtk.Window):
                         gif_cmd,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
-                        timeout=15
+                        timeout=25
                     )
+
+                    print("2")
 
                     # For debugging
                     if result.returncode != 0:
@@ -1970,6 +1999,8 @@ class FileExplorer(Gtk.Window):
                     ]
                     result = subprocess.run(simple_cmd, stdout=subprocess.DEVNULL,
                                             stderr=subprocess.DEVNULL, timeout=10)
+
+                print("3")
             elif content_type == "image/webp" and self.is_animated_webp(path):
                 # For animated WebP files
                 cmd = [
@@ -2007,49 +2038,147 @@ class FileExplorer(Gtk.Window):
         try:
             # Create a unique hash for the file to avoid name collisions
             file_hash = hashlib.md5(path.encode()).hexdigest()
-            gif_path = os.path.join(tempfile.gettempdir(), f"preview_{file_hash}.gif")
+            icon_size = self.icon_size
+            gif_path = os.path.join("/home/sheeye/Videos/Cache", f"preview_{file_hash}_{icon_size}.gif")
+            lck_path = os.path.join("/home/sheeye/Videos/Cache", f"preview_{file_hash}_{icon_size}.lck")
 
             # Check if we already have a cached version
             if os.path.exists(gif_path) and os.path.getmtime(gif_path) > os.path.getmtime(path):
-                return gif_path
+                # Verify the GIF is actually animated before returning it
+                try:
+                    anim = GdkPixbuf.PixbufAnimation.new_from_file(gif_path)
+                    if not anim.is_static_image():
+                        return gif_path
+                    # If it's static, we'll recreate it
+                except Exception:
+                    pass
+            if os.path.exists(lck_path):
+                print("Locked")
+                return None
+
+            c = open(lck_path,"w+")
+            c.close()
+
 
             content_type, _ = mimetypes.guess_type(path)
 
+            # For debugging
+            print(f"Converting {path} to animated GIF...")
+
             # Set up FFmpeg command based on file type
             if content_type and content_type.startswith("video/"):
-                # For videos, extract a short segment and convert to GIF
-                # Adjust duration and fps based on your needs
-                cmd = [
-                    "ffmpeg", "-y", "-i", path,
-                    "-t", "2.5",  # 2.5 seconds of video
-                    "-vf",
-                    f"fps=10,scale={self.icon_size}:{self.icon_size}:force_original_aspect_ratio=decrease:flags=lanczos",
-                    "-loop", "0",  # Loop indefinitely
+                # Use the fast method first - this drastically speeds up processing
+                # by only reading the start of the file
+                fast_cmd = [
+                    "ffmpeg", "-y",
+                    "-ss", "0",  # Start from the beginning
+                    "-i", path,  # Input file
+                    "-t", "5",   # Only process 2 seconds
+                    "-vf", f"fps=10,scale={self.icon_size}:-1:flags=lanczos",
+                    "-an",       # No audio
                     gif_path
                 ]
+
+                try:
+                    # Set a short timeout to avoid hanging on large files
+                    result = subprocess.run(
+                        fast_cmd,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=3  # Short timeout for fast processing
+                    )
+
+                    # Check if we got a valid animated GIF
+                    if result.returncode == 0 and os.path.exists(gif_path):
+                        anim = GdkPixbuf.PixbufAnimation.new_from_file(gif_path)
+                        if not anim.is_static_image():
+                            print(f"Fast method successful: {gif_path}")
+                            return gif_path
+                except subprocess.TimeoutExpired:
+                    print("Fast method timed out, trying fallback...")
+                except Exception as e:
+                    print(f"Fast method failed: {e}")
+
+                # Fallback: Create a simple animated GIF from a few frames
+                # This approach manually extracts frames and combines them
+                try:
+                    # Create a temporary directory for the frames
+                    temp_dir = os.path.join(tempfile.gettempdir(), f"frames_{file_hash}")
+                    os.makedirs(temp_dir, exist_ok=True)
+
+                    # Extract 3 frames at 1-second intervals
+                    for i in range(3):
+                        frame_path = os.path.join(temp_dir, f"frame_{i}.png")
+                        frame_cmd = [
+                            "ffmpeg", "-y",
+                            "-ss", str(i),  # Skip to second i
+                            "-i", path,
+                            "-vframes", "1",  # Extract exactly one frame
+                            "-vf", f"scale={self.icon_size}:-1:flags=lanczos",
+                            "-q:v", "2",  # High quality
+                            frame_path
+                        ]
+
+                        subprocess.run(
+                            frame_cmd,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            timeout=2  # Short timeout per frame
+                        )
+
+                    # Check if we got at least 2 frames
+                    frames = [f for f in os.listdir(temp_dir) if f.endswith('.png')]
+                    if len(frames) >= 2:
+                        # Combine frames into a GIF
+                        frames_pattern = os.path.join(temp_dir, "frame_%d.png")
+                        combine_cmd = [
+                            "ffmpeg", "-y",
+                            "-framerate", "1",  # 1 FPS (1 second per frame)
+                            "-i", frames_pattern,
+                            "-loop", "0",  # Loop forever
+                            gif_path
+                        ]
+
+                        subprocess.run(
+                            combine_cmd,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            timeout=3
+                        )
+
+                        # Clean up the frames
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+
+                        # Verify it's animated
+                        if os.path.exists(gif_path):
+                            anim = GdkPixbuf.PixbufAnimation.new_from_file(gif_path)
+                            if not anim.is_static_image():
+                                print(f"Frame-based method successful: {gif_path}")
+                                return gif_path
+                except Exception as e:
+                    print(f"Frame-based method failed: {e}")
+                    # Clean up any temporary directory
+                    if 'temp_dir' in locals():
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+
             elif content_type == "image/webp" and self.is_animated_webp(path):
-                # For animated WebP files
+                # For animated WebP files - use simpler command
                 cmd = [
                     "ffmpeg", "-y", "-i", path,
-                    "-vf",
-                    f"scale={self.icon_size}:{self.icon_size}:force_original_aspect_ratio=decrease:flags=lanczos",
-                    "-loop", "0",
+                    "-vf", f"scale={self.icon_size}:-1:flags=lanczos",
                     gif_path
                 ]
+                result = subprocess.run(cmd, stdout=subprocess.DEVNULL,
+                                       stderr=subprocess.DEVNULL, timeout=3)
+
+                # Verify it's animated
+                if result.returncode == 0 and os.path.exists(gif_path):
+                    anim = GdkPixbuf.PixbufAnimation.new_from_file(gif_path)
+                    if not anim.is_static_image():
+                        return gif_path
             else:
                 # Unsupported format
                 return None
-
-            # Run the conversion
-            result = subprocess.run(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=10  # Timeout after 10 seconds
-            )
-
-            if result.returncode == 0 and os.path.exists(gif_path):
-                return gif_path
 
         except Exception as e:
             print(f"Error converting to GIF: {e}")
@@ -2191,7 +2320,7 @@ class FileExplorer(Gtk.Window):
                             image = Gtk.Image.new_from_animation(pixbuf_anim)
                         elif content_type == "image/webp" and self.is_animated_webp(path):
                             # Animated WebP - convert to GIF
-                            gif_path = self.convert_to_gif(path)
+                            gif_path = self.convert_to_gif2(path)
                             if gif_path:
                                 pixbuf_anim = GdkPixbuf.PixbufAnimation.new_from_file(gif_path)
                                 image = Gtk.Image.new_from_animation(pixbuf_anim)
@@ -2205,7 +2334,7 @@ class FileExplorer(Gtk.Window):
                             image = Gtk.Image.new_from_pixbuf(pixbuf)
                     elif content_type.startswith("video/"):
                         # Convert video to animated GIF for preview
-                        gif_path = self.convert_to_gif(path)
+                        gif_path = self.convert_to_gif2(path)
                         if gif_path:
                             try:
                                 pixbuf_anim = GdkPixbuf.PixbufAnimation.new_from_file(gif_path)
@@ -2280,6 +2409,7 @@ class FileExplorer(Gtk.Window):
             self.history_pos = len(self.history) - 1
 
             # Navigate to directory
+            print("DEB A")
             self.load_directory(path)
         else:
             # Open file with default application
@@ -2287,6 +2417,7 @@ class FileExplorer(Gtk.Window):
                 self.trans.fileView = False
                 self.trans.forceWeb = True
                 self.trans.load_url("file://"+path)
+                #self.trans.histPoint+=1
                 #subprocess.Popen(["xdg-open", path])
             except Exception as e:
                 self.show_error_dialog("Error opening file", str(e))
@@ -2413,7 +2544,7 @@ class FileExplorer(Gtk.Window):
                     shutil.rmtree(path)
                 else:
                     os.unlink(path)
-                self.load_directory(self.current_path)
+                self.on_refresh_clicked(None)
             except Exception as e:
                 self.show_error_dialog("Delete Error", str(e))
 
@@ -2454,7 +2585,8 @@ class FileExplorer(Gtk.Window):
                 new_path = os.path.join(os.path.dirname(path), new_name)
                 try:
                     os.rename(path, new_path)
-                    self.load_directory(self.current_path)
+                    #self.load_directory(self.current_path)
+                    self.on_refresh_clicked(None)
                 except Exception as e:
                     self.show_error_dialog("Rename Error", str(e))
 
@@ -2497,7 +2629,8 @@ class FileExplorer(Gtk.Window):
                 folder_path = os.path.join(self.current_path, folder_name)
                 try:
                     os.makedirs(folder_path, exist_ok=False)
-                    self.load_directory(self.current_path)
+                    #self.load_directory(self.current_path)
+                    self.on_refresh_clicked(None)
                 except FileExistsError:
                     self.show_error_dialog("Error", f"A folder named '{folder_name}' already exists")
                 except Exception as e:
@@ -2544,7 +2677,7 @@ class FileExplorer(Gtk.Window):
                     # Create empty file
                     with open(file_path, 'w') as f:
                         pass
-                    self.load_directory(self.current_path)
+                    self.on_refresh_clicked(None)
                 except FileExistsError:
                     self.show_error_dialog("Error", f"A file named '{file_name}' already exists")
                 except Exception as e:
@@ -2650,11 +2783,11 @@ class FileExplorer(Gtk.Window):
 
     def set_sort_method(self, method):
         self.sort_by = method
-        self.load_directory(self.current_path)
+        self.on_refresh_clicked(None)
 
     def toggle_sort_reverse(self, widget):
         self.sort_reverse = widget.get_active()
-        self.load_directory(self.current_path)
+        self.on_refresh_clicked(None)
 
     def on_path_changed(self, entry):
         path = entry.get_text()
@@ -2765,7 +2898,7 @@ class FileExplorer(Gtk.Window):
         self.flow_box.set_max_children_per_line(self.columns)
 
         # Reload directory
-        self.load_directory(self.current_path)
+        self.on_refresh_clicked(None)
 
     def on_button_press(self, widget, event):
         button_num = event.button
@@ -2780,6 +2913,39 @@ class FileExplorer(Gtk.Window):
         return False
 
     def on_key_press(self, widget, event):
+        print(event.keyval)
+        button_num = event.keyval
+        if button_num == 65470:
+            print("changed")
+            self.transient.webview = self.transient.webview_org
+            self.transient.normie_view.show_all()
+            for c in self.transient.tabs_views:
+                c.hide()
+            self.transient.update_tab_names()
+            self.transient.tab_menu.show_all()
+            self.transient.fileViewSwitch()
+            return True
+        elif button_num > 65470 and button_num <= 65473:
+            print("changed")
+            for c in self.transient.tabs_views:
+                c.hide()
+            self.transient.normie_view.hide()
+            self.transient.webview = self.transient.tabs[button_num-65471]
+            self.transient.tabs_views[button_num-65471].show_all()
+            self.transient.update_tab_names()
+            self.transient.tab_menu.show_all()
+            self.transient.fileViewSwitch()
+            return True
+        if not self.transient.fileView and event.keyval == Gdk.KEY_Tab:
+            self.transient.changed*=-1
+            if self.transient.changed<0:
+                self.transient.embed_view.show_all()
+                self.transient.nav_bar.hide()
+                self.transient.normie_view.hide()
+            else:
+                self.transient.embed_view.hide()
+                self.transient.normie_view.show_all()
+                self.transient.nav_bar.show_all()
         if not self.transient.fileView:
             return False
 
@@ -2794,28 +2960,24 @@ class FileExplorer(Gtk.Window):
                 box = child.get_child()
                 if hasattr(box, 'path'):
                     self.delete_without_confirmation(box.path)
+                self.on_refresh_clicked(None)
                 return True
         if event.keyval == Gdk.KEY_Tab:
+            print("hi")
             self.open_terminal(self.current_path)
             return True
         if event.keyval == Gdk.keyval_from_name("bracketleft"):
-            self.icon_size-=16
+            self.icon_size/=2
             self.on_refresh_clicked(None)
             #self.load_directory(self.current_path)
             return True
         if event.keyval == Gdk.keyval_from_name("bracketright"):
-            self.icon_size+=16
+            self.icon_size*=2
             #self.load_directory(self.current_path)
             self.on_refresh_clicked(None)
             return True
-        if event.keyval == Gdk.KEY_r:
+        if event.keyval == 65474:
             self.on_refresh_clicked(None)
-            return True
-        if event.keyval == Gdk.KEY_q:
-            self.transient.on_back_clicked(None)
-            return True
-        if event.keyval == Gdk.KEY_e:
-            self.transient.on_forward_clicked(None)
             return True
 
         if event.state & Gdk.ModifierType.CONTROL_MASK:
@@ -2850,7 +3012,7 @@ class FileExplorer(Gtk.Window):
                 shutil.rmtree(path)
             else:
                 os.unlink(path)
-            self.load_directory(self.current_path)
+            self.on_refresh_clicked(None)
         except Exception as e:
             self.show_error_dialog("Delete Error", str(e))
 
