@@ -1651,7 +1651,10 @@ class WebBrowser(Gtk.Window):
 
 
 
-            self.tab_labels[c].set_markup(f"{bold_start}{c + 1}. {icona}{name}{bold_end}")
+            #self.tab_labels[c].set_markup(f"{bold_start}{icona}{c + 1}. {name}{bold_end}")
+            #numbers = ["¹","²","³","⁴"]
+            #<span size="x-large">{numbers[c]}</span>
+            self.tab_labels[c].set_markup(f'<span size="larger"><sup>{c+1}</sup></span>{bold_start}{icona}{name}{bold_end}')
 
     def fileViewSwitch(self):
         url = self.webview.get_uri()
