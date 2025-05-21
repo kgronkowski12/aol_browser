@@ -1190,6 +1190,7 @@ class WebBrowser(Gtk.Window):
         scrolled_window = self.webview.get_parent()
 
         # Remove old webview
+        c = self.webview
         scrolled_window.remove(self.webview)
 
         # Create new content manager and webview
@@ -1197,6 +1198,8 @@ class WebBrowser(Gtk.Window):
 
         # Create a new WebView with the settings
         self.webview = WebKit2.WebView.new_with_user_content_manager(self.content_manager)
+        if c==self.webview_org:
+            self.webview_org=self.webview
 
         # Apply same settings as original webview
         settings = self.webview.get_settings()
@@ -1514,18 +1517,6 @@ class WebBrowser(Gtk.Window):
         #self.win2.current_path=self.url_entry.get_text()
         #self.win2.on_refresh_clicked(None)
         #print("GOING BACK",self.win2.current_path,self.url_entry.get_text(),self.history[len(self.history)-2-self.histPoint])
-        if False:
-            if not self.fileView:
-                if self.webview.can_go_back():
-                    self.webview.go_back()
-                    self.load_url(self.win2.current_path)
-                    if False:
-                        if self.url_entry.get_text().__contains__("file://"):
-                            #print("Yo")
-                            self.fileView = True
-                            self.on_bookmark_button_toggled(None)
-            else:
-                self.win2.go_back()
 
     def on_forward_clicked(self, widget):
         urli = self.url_entry.get_text()
@@ -1548,17 +1539,6 @@ class WebBrowser(Gtk.Window):
                 newHist.append(self.history[c])
         self.history = newHist
         new_urli = self.url_entry.get_text()
-        if False:
-            if not self.fileView:
-                if self.webview.can_go_forward():
-                    self.webview.go_forward()
-            # File manager
-            else:
-                if self.win2.history_pos < len(self.win2.history) - 1:
-                    self.win2.history_pos += 1
-                    path = self.win2.history[self.win2.history_pos]
-                    self.win2.load_directory(path)
-                    print("DEB 2")
 
     def on_refresh_clicked(self, widget):
         if not self.fileView:
@@ -1658,7 +1638,7 @@ class WebBrowser(Gtk.Window):
 
     def fileViewSwitch(self):
         url = self.webview.get_uri()
-        if url.startswith("/") or url.startswith("file://"):
+        if url.startswith("/") or url.startswith("file://") and os.path.isdir(url.replace("file://","")):
             self.fileView=True
         else:
             self.fileView=False
@@ -1710,7 +1690,7 @@ class WebBrowser(Gtk.Window):
         #if self.webview==self.webview_org:
         if self.forceWeb:
             self.fileView=False
-        elif url.startswith("file://") and (len(url)<6 or not url[len(url)-5:].__contains__(".")):
+        elif os.path.isdir(url.replace("file://","")):
             self.fileView=True
         else:
             self.fileView=False

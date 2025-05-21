@@ -1698,30 +1698,32 @@ class FileExplorer(Gtk.Window):
             for c in range(len(parts)-1):
                 new_path+=parts[c]+"/"
             path=new_path
-        if path == self.current_path and not self.is_refresh:
+        if (path == self.current_path or path+"/"==self.current_path or path == self.current_path+"/" ) and not self.is_refresh:
             return
         if not self.is_refresh:
             print("LOAD DIRECTORY ",self.current_path,path)
             self.current_path=path
-            #self.transient.on_uri_changed(self.transient.webview,"")
+            self.transient.on_uri_changed(self.transient.webview,"")
             newHist = []
-            transient = self.transient
-            for c in range(len(transient.history)):
-                if c == 0 or (transient.history[c] != transient.history[c - 1] and transient.history[c]+"/" != transient.history[c - 1] and transient.history[c] != transient.history[c - 1]+"/"):
-                    newHist.append(transient.history[c])
-            transient.history = newHist
+            if False:
+                transient = self.trans
+                for c in range(len(transient.history)):
+                    if c == 0 or (transient.history[c] != transient.history[c - 1] and transient.history[c]+"/" != transient.history[c - 1] and transient.history[c] != transient.history[c - 1]+"/"):
+                        newHist.append(transient.history[c])
+                transient.history = newHist
 
 
-        if not path.startswith(("/","~")):
+        if not path.startswith(("/","~","file://")):
             #path="/home/sheeye/"
             self.trans.fileView=False
             return
-        if path.__contains__(".") and not path.__contains__("/.") and not path.endswith("/"):
-            c = path.split("/")
-            newpath="/"
-            for r in range(len(c)-1):
-                newpath+=c[r]+"/"
-            path=newpath
+        if False:
+            if path.__contains__(".") and not path.__contains__("/.") and not path.endswith("/"):
+                c = path.split("/")
+                newpath="/"
+                for r in range(len(c)-1):
+                    newpath+=c[r]+"/"
+                path=newpath
 
 
         for child in self.flow_box.get_children():
@@ -1754,8 +1756,8 @@ class FileExplorer(Gtk.Window):
         try:
             # Update path
             self.current_path = path
-            if self.transient.webview!=self.transient.webview_org:
-                self.transient.webview.load_uri("file://"+path)
+            self.trans.skipHistory = True
+            self.transient.webview.load_uri("file://"+path)
             self.path_bar.set_text(self.current_path)
 
             # Play the folder opened sound only if this is not a refresh
