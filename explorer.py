@@ -2917,37 +2917,45 @@ class FileExplorer(Gtk.Window):
     def on_key_press(self, widget, event):
         print(event.keyval)
         button_num = event.keyval
-        if button_num == 65470:
-            print("changed")
-            self.transient.webview = self.transient.webview_org
-            self.transient.normie_view.show_all()
-            for c in self.transient.tabs_views:
-                c.hide()
-            self.transient.update_tab_names()
-            self.transient.tab_menu.show_all()
-            self.transient.fileViewSwitch()
-            return True
-        elif button_num > 65470 and button_num <= 65473:
-            print("changed")
-            for c in self.transient.tabs_views:
-                c.hide()
-            self.transient.normie_view.hide()
-            self.transient.webview = self.transient.tabs[button_num-65471]
-            self.transient.tabs_views[button_num-65471].show_all()
-            self.transient.update_tab_names()
-            self.transient.tab_menu.show_all()
-            self.transient.fileViewSwitch()
-            return True
-        if not self.transient.fileView and event.keyval == Gdk.KEY_Tab:
-            self.transient.changed*=-1
-            if self.transient.changed<0:
-                self.transient.embed_view.show_all()
-                self.transient.nav_bar.hide()
-                self.transient.normie_view.hide()
-            else:
-                self.transient.embed_view.hide()
+        if self.transient.changed>0:
+            if button_num == 65470:
+                print("changed")
+                self.transient.webview = self.transient.webview_org
                 self.transient.normie_view.show_all()
-                self.transient.nav_bar.show_all()
+                for c in self.transient.tabs_views:
+                    c.hide()
+                self.transient.update_tab_names()
+                self.transient.tab_menu.show_all()
+                self.transient.fileViewSwitch()
+                return True
+            elif button_num > 65470 and button_num <= 65473:
+                print("changed")
+                for c in self.transient.tabs_views:
+                    c.hide()
+                self.transient.normie_view.hide()
+                self.transient.webview = self.transient.tabs[button_num-65471]
+                self.transient.tabs_views[button_num-65471].show_all()
+                self.transient.update_tab_names()
+                self.transient.tab_menu.show_all()
+                self.transient.fileViewSwitch()
+                return True
+        if not self.transient.fileView and event.keyval == Gdk.KEY_Tab:
+            if self.transient.webview==self.transient.webview_org:
+                self.transient.changed*=-1
+                if self.transient.changed<0:
+                    self.transient.embed_view.show_all()
+                    self.transient.nav_bar.hide()
+                    self.transient.menu_bar.hide()
+                    self.transient.full_tool.hide()
+                    self.transient.tab_menu.hide()
+                    self.transient.normie_view.hide()
+                else:
+                    self.transient.embed_view.hide()
+                    self.transient.normie_view.show_all()
+                    self.transient.nav_bar.show_all()
+                    self.transient.menu_bar.show_all()
+                    self.transient.full_tool.show_all()
+                    self.transient.tab_menu.show_all()
         if not self.transient.fileView:
             return False
 

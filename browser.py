@@ -4,9 +4,14 @@ import os
 import subprocess
 import json
 import time
+import requests
+from io import BytesIO
+from PIL import Image
 from pathlib import Path
 from explorer import FileExplorer
 import urllib
+from urllib.parse import urlparse
+import hashlib
 
 gi.require_version('Gtk', '3.0')
 gi.require_version('WebKit2', '4.0')
@@ -386,6 +391,7 @@ class WebBrowser(Gtk.Window):
         # Create WebView with our context
         webview = WebKit2.WebView.new_with_context(self.context)
 
+
         # Connect signals
         if not complementary:
             webview.connect("load-changed", self.on_load_changed)
@@ -487,8 +493,11 @@ class WebBrowser(Gtk.Window):
         self.resize(size[0],size[1])
 
 
+
+
     def create_menu_bar(self, vbox):
         menubar = Gtk.MenuBar()
+        self.menu_bar = menubar
         #menubar.override_background_color(Gtk.StateType.NORMAL,Gdk.RGBA(0,0,0,1))
         menubar.set_opacity(1)
 
@@ -565,17 +574,12 @@ class WebBrowser(Gtk.Window):
         view_item = Gtk.MenuItem(label="View")
         view_item.set_submenu(view_menu)
 
-        # Toggle Hardware Acceleration
-        self.hw_accel_item = Gtk.CheckMenuItem(label="Hardware Acceleration")
-        self.hw_accel_item.set_active(True)
-        self.hw_accel_item.connect("toggled", self.on_toggle_hw_accel)
-        view_menu.append(self.hw_accel_item)
 
         separator3 = Gtk.SeparatorMenuItem()
         view_menu.append(separator3)
 
         history_item = Gtk.MenuItem(label="History")
-        history_item.connect("activate", self.on_history)
+        history_item.connect("activate", self.on_show_history)
         view_menu.append(history_item)
 
         # Bookmarks Menu Item
@@ -584,58 +588,40 @@ class WebBrowser(Gtk.Window):
         view_menu.append(bookmarks_item)
 
         view_menu.append(separator3)
-
-        # User Agent submenu
-        user_agent_menu = Gtk.Menu()
-        user_agent_item = Gtk.MenuItem(label="User Agent")
-        user_agent_item.set_submenu(user_agent_menu)
-
-        # Mobile agent
         self.mobile_agent = Gtk.RadioMenuItem(label="Mobile")
         self.mobile_agent.connect("toggled", self.on_user_agent_toggled, "mobile")
         self.mobile_agent.set_active(True)  # Default to mobile
-        user_agent_menu.append(self.mobile_agent)
 
-        # Desktop agent
-        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
-        self.desktop_agent.set_label("Desktop")
-        self.desktop_agent.connect("toggled", self.on_user_agent_toggled, "desktop")
-        user_agent_menu.append(self.desktop_agent)
-
-        view_menu.append(user_agent_item)
-
-        # Popup options
-        separator4 = Gtk.SeparatorMenuItem()
-        view_menu.append(separator4)
-
-        self.popup_checkbox = Gtk.CheckMenuItem(label="Enable Popups")
-        self.popup_checkbox.set_active(True)  # Default to enabled
-        self.popup_checkbox.connect("toggled", self.on_popup_toggled)
-        view_menu.append(self.popup_checkbox)
-
-        separator3 = Gtk.SeparatorMenuItem()
         view_menu.append(separator3)
+        self.mobile_agent3 = Gtk.RadioMenuItem(label="Mobile")
+        self.mobile_agent3.connect("toggled", self.on_user_agent_toggled, "mobile")
+        self.mobile_agent3.set_active(True)  # Default to mobile
+
+        self.mobile_agent2 = Gtk.RadioMenuItem(label="Mobile")
+        self.mobile_agent2.connect("toggled", self.on_user_agent_toggled, "mobile")
+        self.mobile_agent2.set_active(True)  # Default to mobile
 
         user_agent_menu = Gtk.Menu()
         user_agent_item = Gtk.MenuItem(label="Size")
         user_agent_item.set_submenu(user_agent_menu)
 
-        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent3)
         self.desktop_agent.set_label("1200x800")
+        self.desktop_agent.set_active(True)  # Default to enabled
         self.desktop_agent.connect("toggled", lambda x: self.res_window([1200,800]))
         user_agent_menu.append(self.desktop_agent)
 
-        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent3)
         self.desktop_agent.set_label("1200x1000")
         self.desktop_agent.connect("toggled", lambda x: self.res_window([1200,1000]))
         user_agent_menu.append(self.desktop_agent)
 
-        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent3)
         self.desktop_agent.set_label("1600x1000")
         self.desktop_agent.connect("toggled", lambda x: self.res_window([1600,1000]))
         user_agent_menu.append(self.desktop_agent)
 
-        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent3)
         self.desktop_agent.set_label("1860x1000")
         self.desktop_agent.connect("toggled", lambda x: self.res_window([1880,1000]))
         user_agent_menu.append(self.desktop_agent)
@@ -644,8 +630,7 @@ class WebBrowser(Gtk.Window):
 
         view_menu.append(user_agent_item)
 
-        separator3 = Gtk.SeparatorMenuItem()
-        view_menu.append(separator3)
+
 
 
 
@@ -654,68 +639,68 @@ class WebBrowser(Gtk.Window):
         user_agent_item = Gtk.MenuItem(label="Opacity")
         user_agent_item.set_submenu(user_agent_menu)
 
-        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent2)
         self.desktop_agent.set_label("100%")
         self.desktop_agent.connect("activate",  lambda x: self.set_opp(1))
         user_agent_menu.append(self.desktop_agent)
 
-        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent2)
         self.desktop_agent.set_label("99%")
         self.desktop_agent.connect("activate", lambda x: self.set_opp(0.99))
         user_agent_menu.append(self.desktop_agent)
 
-        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent2)
         self.desktop_agent.set_label("98%")
         self.desktop_agent.connect("activate", lambda x: self.set_opp(0.98))
         user_agent_menu.append(self.desktop_agent)
 
-        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent2)
         self.desktop_agent.set_label("97%")
         self.desktop_agent.connect("activate", lambda x: self.set_opp(0.97))
         user_agent_menu.append(self.desktop_agent)
 
-        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent2)
         self.desktop_agent.set_label("95%")
         self.desktop_agent.set_active(True)  # Default to enabled
         self.desktop_agent.connect("activate", lambda x: self.set_opp(0.95))
         user_agent_menu.append(self.desktop_agent)
 
-        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent2)
         self.desktop_agent.set_label("90%")
         self.desktop_agent.connect("activate", lambda x: self.set_opp(0.90))
         user_agent_menu.append(self.desktop_agent)
 
-        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent2)
         self.desktop_agent.set_label("85%")
         self.desktop_agent.connect("activate", lambda x: self.set_opp(0.85))
         user_agent_menu.append(self.desktop_agent)
 
-        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent2)
         self.desktop_agent.set_label("80%")
         self.desktop_agent.connect("activate", lambda x: self.set_opp(0.8))
         user_agent_menu.append(self.desktop_agent)
 
-        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent2)
         self.desktop_agent.set_label("70%")
         self.desktop_agent.connect("activate", lambda x: self.set_opp(0.7))
         user_agent_menu.append(self.desktop_agent)
 
-        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent2)
         self.desktop_agent.set_label("50%")
         self.desktop_agent.connect("activate", lambda x: self.set_opp(0.5))
         user_agent_menu.append(self.desktop_agent)
 
-        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent2)
         self.desktop_agent.set_label("25%")
         self.desktop_agent.connect("activate", lambda x: self.set_opp(0.25))
         user_agent_menu.append(self.desktop_agent)
 
-        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent2)
         self.desktop_agent.set_label("10%")
         self.desktop_agent.connect("activate", lambda x: self.set_opp(0.1))
         user_agent_menu.append(self.desktop_agent)
 
-        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent)
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent2)
         self.desktop_agent.set_label("0%")
         self.desktop_agent.connect("activate", lambda x: self.set_opp(0))
         user_agent_menu.append(self.desktop_agent)
@@ -762,6 +747,39 @@ class WebBrowser(Gtk.Window):
         dev_tools_item.connect("activate", self.on_developer_tools)
         tools_menu.append(dev_tools_item)
 
+        # Toggle Hardware Acceleration
+        self.hw_accel_item = Gtk.CheckMenuItem(label="Hardware Acceleration")
+        self.hw_accel_item.set_active(True)
+        self.hw_accel_item.connect("toggled", self.on_toggle_hw_accel)
+        tools_menu.append(self.hw_accel_item)
+
+
+        self.popup_checkbox = Gtk.CheckMenuItem(label="Enable Popups")
+        self.popup_checkbox.set_active(True)  # Default to enabled
+        self.popup_checkbox.connect("toggled", self.on_popup_toggled)
+        tools_menu.append(self.popup_checkbox)
+
+        # User Agent submenu
+        user_agent_menu = Gtk.Menu()
+        user_agent_item = Gtk.MenuItem(label="User Agent")
+        user_agent_item.set_submenu(user_agent_menu)
+
+        # Mobile agent
+        self.mobile_agent = Gtk.RadioMenuItem(label="Mobile")
+        self.mobile_agent.connect("toggled", self.on_user_agent_toggled, "mobile")
+        self.mobile_agent.set_active(True)  # Default to mobile
+        user_agent_menu.append(self.mobile_agent2)
+
+        # Desktop agent
+        self.desktop_agent = Gtk.RadioMenuItem.new_from_widget(self.mobile_agent2)
+        self.desktop_agent.set_label("Desktop")
+        self.desktop_agent.connect("toggled", self.on_user_agent_toggled, "desktop")
+        user_agent_menu.append(self.desktop_agent)
+
+        tools_menu.append(user_agent_item)
+
+
+
         menubar.append(tools_item)
 
         # View Menu - add after existing items
@@ -772,7 +790,7 @@ class WebBrowser(Gtk.Window):
         self.ad_blocking = Gtk.CheckMenuItem(label="Block Ads & Tracking")
         self.ad_blocking.set_active(True)
         self.ad_blocking.connect("toggled", self.on_ad_blocking_toggled)
-        view_menu.append(self.ad_blocking)
+        tools_menu.append(self.ad_blocking)
 
         # Help Menu
         help_menu = Gtk.Menu()
@@ -784,6 +802,7 @@ class WebBrowser(Gtk.Window):
         help_menu.append(about_item)
 
         menubar.append(help_item)
+
 
     def update_bookmarks_menu(self, menu=None):
         if menu is None:
@@ -817,6 +836,7 @@ class WebBrowser(Gtk.Window):
         # Main container box for the toolbars (already a Box, keeping it)
         toolbar_main_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         toolbar_main_container.override_background_color(Gtk.StateType.NORMAL,Gdk.RGBA(1, 1, 1, 1))
+        self.full_tool = toolbar_main_container
         #toolbar_main_container.set_opacity(0.85)
 
         # --- Styling for the main container (Optional, if you want its background styled) ---
@@ -1244,102 +1264,250 @@ class WebBrowser(Gtk.Window):
         else:
             self.webview.load_uri("https://www.google.com")
 
+    def create_menu_item_with_favicon(self, label, url, favicon_url):
+        # Create cache directory if it doesn't exist
+        cache_dir = "/home/sheeye/Videos/Cache"
+        os.makedirs(cache_dir, exist_ok=True)
 
+        # Create a filename based on the domain name and favicon URL
+        domain = urlparse(favicon_url).netloc or urlparse(url).netloc
+        # Use hash to handle special characters and long URLs
+        url_hash = hashlib.md5(favicon_url.encode()).hexdigest()[:8]
+        favicon_filename = f"{domain}_{url_hash}.png"
+        favicon_path = os.path.join(cache_dir, favicon_filename)
 
+        # Create a horizontal box to hold icon and label
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
 
+        try:
+            # Check if favicon exists in cache
+            if os.path.exists(favicon_path):
+                print(f"Using cached favicon for {label}")
+                # Load from cache
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                    favicon_path, 16, 16, True
+                )
+                icon = Gtk.Image.new_from_pixbuf(pixbuf)
+            else:
+                print(f"Downloading favicon for {label}")
+                # Download favicon
+                response = requests.get(favicon_url, timeout=5)
+                response.raise_for_status()
 
-        
+                # Load image from bytes
+                image_data = BytesIO(response.content)
+                pil_image = Image.open(image_data)
 
-        
+                # Resize to 16x16 (standard favicon size)
+                pil_image = pil_image.resize((16, 16), Image.Resampling.LANCZOS)
+
+                # Convert to RGB if necessary (remove alpha channel for PNG saving)
+                if pil_image.mode in ('RGBA', 'LA'):
+                    background = Image.new('RGB', pil_image.size, (255, 255, 255))
+                    if pil_image.mode == 'RGBA':
+                        background.paste(pil_image, mask=pil_image.split()[-1])
+                    else:
+                        background.paste(pil_image)
+                    pil_image = background
+
+                # Save to cache
+                pil_image.save(favicon_path, format='PNG')
+                print(f"Saved favicon to cache: {favicon_path}")
+
+                # Convert PIL image to GdkPixbuf
+                image_bytes = BytesIO()
+                pil_image.save(image_bytes, format='PNG')
+                image_bytes.seek(0)
+
+                loader = GdkPixbuf.PixbufLoader.new_with_type('png')
+                loader.write(image_bytes.getvalue())
+                loader.close()
+                pixbuf = loader.get_pixbuf()
+
+                # Create GTK Image widget
+                icon = Gtk.Image.new_from_pixbuf(pixbuf)
+
+        except Exception as e:
+            print(f"Failed to load favicon for {label}: {e}")
+            # Use a default icon
+            icon = Gtk.Image.new_from_icon_name("applications-internet", Gtk.IconSize.MENU)
+
+        # Create label
+        label_widget = Gtk.Label(label=label)
+        label_widget.set_xalign(0)  # Left align
+
+        # Add to box
+        box.pack_start(icon, False, False, 0)
+        box.pack_start(label_widget, True, True, 0)
+        box.show_all()
+
+        # Create menu item and add the box
+        menu_item = Gtk.RadioMenuItem()
+        menu_item.add(box)
+        menu_item.connect("activate", lambda x: self.load_url(url))
+
+        return menu_item
+
     def on_internet_clicked(self, button):
-        # Create a menu for sort optionshttps://en.wikipedia.org/wiki/Special:Random
+        # Create a menu for internet options
         menu = Gtk.Menu()
 
-        name_item = Gtk.RadioMenuItem(label="Youtube (VIDEO)")
-        #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://youtube.com"))
-        menu.append(name_item)
+        # VIDEO section
+        youtube_item = self.create_menu_item_with_favicon(
+            "Youtube (VIDEO)",
+            "https://youtube.com",
+            "https://www.google.com/s2/favicons?domain=youtube.com"
+        )
+        menu.append(youtube_item)
 
-        name_item = Gtk.RadioMenuItem(label="GryPl (GAMES)")
-        #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://gry.pl"))
-        menu.append(name_item)
 
-        name_item = Gtk.RadioMenuItem(label="Aliexpress (SHOP)")
-        #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://pl.aliexpress.com/"))
-        menu.append(name_item)
+        # SOCIAL section
+        discord_item = self.create_menu_item_with_favicon(
+            "Discord (Social)",
+            "https://discord.com/channels/@me",
+            "https://www.google.com/s2/favicons?domain=discord.com"
+        )
+        menu.append(discord_item)
 
-        name_item = Gtk.RadioMenuItem(label="Overleaf (TEX)")
-        #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://www.overleaf.com/project"))
-        menu.append(name_item)
+        reddit_item = self.create_menu_item_with_favicon(
+            "Reddit (Social)",
+            "https://old.reddit.com",
+            "https://www.google.com/s2/favicons?domain=reddit.com"
+        )
+        menu.append(reddit_item)
 
-        name_item = Gtk.RadioMenuItem(label="Github (DEV)")
-        #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://github.com/"))
-        menu.append(name_item)
+        twitter_item = self.create_menu_item_with_favicon(
+            "Twitter (Social)",
+            "https://x.com",
+            "https://www.google.com/s2/favicons?domain=x.com"
+        )
+        menu.append(twitter_item)
 
-        # Separator in sort submenu
-        sort_sep = Gtk.SeparatorMenuItem()
-        menu.append(sort_sep)
-        
-        name_item = Gtk.RadioMenuItem(label="Wikipedia (INFO)")
-        #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://en.wikipedia.org/wiki/Special:Random"))
-        menu.append(name_item)
-
-        name_item = Gtk.RadioMenuItem(label="LKML (INFO)")
-        #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://lkml.org"))
-        menu.append(name_item)
-
+        # Separator
         sort_sep = Gtk.SeparatorMenuItem()
         menu.append(sort_sep)
 
-        name_item = Gtk.RadioMenuItem(label="Pinterest (IMG)")
-        #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://pl.pinterest.com/"))
-        menu.append(name_item)
 
-        name_item = Gtk.RadioMenuItem(label="Dan Booru (IMG)")
-        #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://danbooru.donmai.us/posts"))
-        menu.append(name_item)
+        # GAMES section
+        grypl_item = self.create_menu_item_with_favicon(
+            "GryPl (GAMES)",
+            "https://gry.pl",
+            "https://www.google.com/s2/favicons?domain=gry.pl"
+        )
+        menu.append(grypl_item)
 
-        name_item = Gtk.RadioMenuItem(label="Civitai (IMG)")
-        #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://civitai.com/home"))
-        menu.append(name_item)
+        # SHOP section
+        aliexpress_item = self.create_menu_item_with_favicon(
+            "Aliexpress (SHOP)",
+            "https://pl.aliexpress.com/",
+            "https://www.google.com/s2/favicons?domain=aliexpress.com"
+        )
+        menu.append(aliexpress_item)
 
+        # TEX section
+        overleaf_item = self.create_menu_item_with_favicon(
+            "Overleaf (TEX)",
+            "https://www.overleaf.com/project",
+            "https://www.google.com/s2/favicons?domain=overleaf.com"
+        )
+        menu.append(overleaf_item)
+
+        # DEV section
+        github_item = self.create_menu_item_with_favicon(
+            "Github (DEV)",
+            "https://github.com/",
+            "https://www.google.com/s2/favicons?domain=github.com"
+        )
+        menu.append(github_item)
+
+
+
+
+
+
+        # Separator
         sort_sep = Gtk.SeparatorMenuItem()
         menu.append(sort_sep)
 
-        name_item = Gtk.RadioMenuItem(label="ChatGPT (AI)")
-        #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://chatgpt.com/"))
-        menu.append(name_item)
+        # INFO section
+        wikipedia_item = self.create_menu_item_with_favicon(
+            "Wikipedia (INFO)",
+            "https://en.wikipedia.org/wiki/Special:Random",
+            "https://www.google.com/s2/favicons?domain=wikipedia.org"
+        )
+        menu.append(wikipedia_item)
 
-        name_item = Gtk.RadioMenuItem(label="Claude (AI)")
-        #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://claude.ai/"))
-        menu.append(name_item)
+    
+        lkml_item = self.create_menu_item_with_favicon(
+            "LKML (INFO)",
+            "https://lkml.org",
+            "https://www.google.com/s2/favicons?domain=error.com"
+        )
+        menu.append(lkml_item)
 
-        name_item = Gtk.RadioMenuItem(label="Deepseek (AI)")
-        #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://chat.deepseek.com/"))
-        menu.append(name_item)
-
-
-        # Separator in sort submenu
+        # Separator
         sort_sep = Gtk.SeparatorMenuItem()
         menu.append(sort_sep)
 
-        name_item = Gtk.RadioMenuItem(label="Translate (TOOL)")
-        #name_item.set_active(self.sort_by == "name")
-        name_item.connect("activate", lambda x: self.load_url("https://www.google.com/search?q=google+translate"))
-        menu.append(name_item)
+        # IMG section
+        pinterest_item = self.create_menu_item_with_favicon(
+            "Pinterest (IMG)",
+            "https://pl.pinterest.com/",
+            "https://www.google.com/s2/favicons?domain=pinterest.com"
+        )
+        menu.append(pinterest_item)
 
+        danbooru_item = self.create_menu_item_with_favicon(
+            "Dan Booru (IMG)",
+            "https://danbooru.donmai.us/posts",
+            "https://www.google.com/s2/favicons?domain=danbooru.donmai.us"
+        )
+        menu.append(danbooru_item)
+
+        civitai_item = self.create_menu_item_with_favicon(
+            "Civitai (IMG)",
+            "https://civitai.com/home",
+            "https://www.google.com/s2/favicons?domain=civitai.com"
+        )
+        menu.append(civitai_item)
+
+        # Separator
+        sort_sep = Gtk.SeparatorMenuItem()
+        menu.append(sort_sep)
+
+        # AI section
+        chatgpt_item = self.create_menu_item_with_favicon(
+            "ChatGPT (AI)",
+            "https://chatgpt.com/",
+            "https://www.google.com/s2/favicons?domain=chatgpt.com"
+        )
+        menu.append(chatgpt_item)
+
+        claude_item = self.create_menu_item_with_favicon(
+            "Claude (AI)",
+            "https://claude.ai/",
+            "https://www.google.com/s2/favicons?domain=claude.ai"
+        )
+        menu.append(claude_item)
+
+        deepseek_item = self.create_menu_item_with_favicon(
+            "Deepseek (AI)",
+            "https://chat.deepseek.com/",
+            "https://www.google.com/s2/favicons?domain=deepseek.com"
+        )
+        menu.append(deepseek_item)
+
+        # Separator
+        sort_sep = Gtk.SeparatorMenuItem()
+        menu.append(sort_sep)
+
+        # TOOL section
+        translate_item = self.create_menu_item_with_favicon(
+            "Translate (TOOL)",
+            "https://www.google.com/search?q=google+translate",
+            "https://www.google.com/s2/favicons?domain=translate.google.com"
+        )
+        menu.append(translate_item)
 
         menu.show_all()
         menu.popup_at_pointer(None)
@@ -1638,7 +1806,7 @@ class WebBrowser(Gtk.Window):
 
     def fileViewSwitch(self):
         url = self.webview.get_uri()
-        if url.startswith("/") or url.startswith("file://") and os.path.isdir(url.replace("file://","")):
+        if url.startswith("/") or url.startswith("file://") and os.path.isdir(url.replace("file://","").replace("%20"," ")):
             self.fileView=True
         else:
             self.fileView=False
@@ -1690,7 +1858,7 @@ class WebBrowser(Gtk.Window):
         #if self.webview==self.webview_org:
         if self.forceWeb:
             self.fileView=False
-        elif os.path.isdir(url.replace("file://","")):
+        elif os.path.isdir(url.replace("file://","").replace("%20"," ")):
             self.fileView=True
         else:
             self.fileView=False
@@ -1734,9 +1902,9 @@ class WebBrowser(Gtk.Window):
                 new_uri=uri.split("&")[0]
             new_uri=new_uri.replace("watch?v=","/embed/")
             new_uri = new_uri.replace("/m.", "/www.")
-        if uri.__contains__("old.reddit"):
-            new_uri = new_uri.replace("old.", "")
-        self.yt_embed.load_uri(new_uri)
+            self.yt_embed.load_uri(new_uri)
+        #if uri.__contains__("old.reddit"):
+        #    new_uri = new_uri.replace("old.", "")
         if not self.skipHistory:
             url = web_view.get_uri()
             if url.endswith("/"):
@@ -1783,7 +1951,10 @@ class WebBrowser(Gtk.Window):
 
             self.statusbar.push(self.statusbar_context, "Loading...")
             self.statusbar.show_all()
-            self.url_entry.set_text(web_view.get_uri())
+            myori = self.url_entry.get_text()
+            if not myori==web_view.get_uri() and not myori+"/"==web_view.get_uri() and not myori==web_view.get_uri()+"/":
+                if self.webview==web_view:
+                    self.url_entry.set_text(web_view.get_uri())
             if self.win2.current_path != self.url_entry.get_text():
                 # self.win2.current_path = self.url_entry.get_text()
                 self.win2.load_directory(self.url_entry.get_text())
@@ -1800,7 +1971,9 @@ class WebBrowser(Gtk.Window):
                 image = Gtk.Image.new_from_animation(pixbuf)
                 self.load_button.set_image(image)
 
-                self.url_entry.set_text(uri)
+                myori = self.url_entry.get_text()
+                if not myori == web_view.get_uri() and not myori + "/" == web_view.get_uri() and not myori == web_view.get_uri() + "/":
+                    self.url_entry.set_text(web_view.get_uri())
                 if self.win2.current_path != self.url_entry.get_text():
                     # self.win2.current_path = self.url_entry.get_text()
                     self.win2.load_directory(self.url_entry.get_text())
@@ -1824,7 +1997,10 @@ class WebBrowser(Gtk.Window):
                         url = url.replace("yewtu.be", "inv.nadeko.net")
                         url = url.replace("www.", "")
 
-                self.url_entry.set_text(url)
+                myori = self.url_entry.get_text()
+                if not myori == web_view.get_uri() and not myori + "/" == web_view.get_uri() and not myori == web_view.get_uri() + "/":
+                    if self.webview==web_view:
+                        self.url_entry.set_text(web_view.get_uri())
                 if self.win2.current_path != self.url_entry.get_text():
                     # self.win2.current_path = self.url_entry.get_text()
                     self.win2.load_directory(self.url_entry.get_text())
@@ -1839,7 +2015,10 @@ class WebBrowser(Gtk.Window):
             #self.webview.override_background_color(Gtk.Statetype.Normal,Gdk.RGBA(0.7,0.7,0.7,0.6))
             self.statusbar.push(self.statusbar_context, "Ready")
             pixbuf = GdkPixbuf.Pixbuf.new_from_file("loaded.png")
-            self.url_entry.set_text(web_view.get_uri())
+            myori = self.url_entry.get_text()
+            if not myori == web_view.get_uri() and not myori + "/" == web_view.get_uri() and not myori == web_view.get_uri() + "/":
+                if self.webview==web_view:
+                    self.url_entry.set_text(web_view.get_uri())
             if self.win2.current_path != self.url_entry.get_text():
                 # self.win2.current_path = self.url_entry.get_text()
                 self.win2.load_directory(self.url_entry.get_text())
