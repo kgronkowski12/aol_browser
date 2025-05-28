@@ -1699,8 +1699,12 @@ class FileExplorer(Gtk.Window):
                 new_path+=parts[c]+"/"
             path=new_path
         if (path == self.current_path or path+"/"==self.current_path or path == self.current_path+"/" ) and not self.is_refresh:
+            self.is_refresh = False
+            print("returend")
             return
-        if not self.is_refresh:
+        print("here")
+        if not self.is_refresh or True:
+            self.is_refresh = False
             print("LOAD DIRECTORY ",self.current_path,path)
             self.current_path=path
             self.transient.on_uri_changed(self.transient.webview,"")
@@ -1761,7 +1765,7 @@ class FileExplorer(Gtk.Window):
             self.path_bar.set_text(self.current_path)
 
             # Play the folder opened sound only if this is not a refresh
-            if not self.is_refresh:
+            if not self.is_refresh or True:
                 if self.trans.skipHistory:
                     self.trans.skipHistory = False
                 else:
@@ -1782,8 +1786,8 @@ class FileExplorer(Gtk.Window):
             while not os.path.isdir(path):
                 parts = path.split("/")
                 new_path=""
-                for c in range(length(parts)-1):
-                    new_path+="/"+c
+                for c in range(len(parts)-1):
+                    new_path+="/"+parts[c]
                 path = new_path
             for item in os.listdir(path):
                 full_path = os.path.join(path, item)

@@ -153,6 +153,7 @@ class WebBrowser(Gtk.Window):
         self.webview = self.create_optimized_webview(False)
         self.webview_org = self.webview
         self.yt_embed = self.create_optimized_webview(True)
+
         self.tabs = []
         for c in range(3):
             b = self.create_optimized_webview(True)
@@ -387,7 +388,7 @@ class WebBrowser(Gtk.Window):
         menu.show_all()
         menu.popup_at_pointer(None)
 
-    def create_optimized_webview(self,complementary):
+    def create_optimized_webview(self,complementary, noBloc = False):
         # Create WebView with our context
         webview = WebKit2.WebView.new_with_context(self.context)
 
@@ -426,10 +427,11 @@ class WebBrowser(Gtk.Window):
         settings.set_enable_accelerated_2d_canvas(True)
         settings.set_enable_webgl(True)
 
-        # Set mobile user agent
-        mobile_user_agent = "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1"
-        #mobile_user_agent = "Mozilla/5.0 (iPad; CPU OS 15_0 like Mac OS X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.50 Safari/537.36"
-        settings.set_property("user-agent", mobile_user_agent)
+        if not noBloc:
+            # Set mobile user agent
+            mobile_user_agent = "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1"
+            #mobile_user_agent = "Mozilla/5.0 (iPad; CPU OS 15_0 like Mac OS X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.50 Safari/537.36"
+            settings.set_property("user-agent", mobile_user_agent)
 
 
 
@@ -1348,6 +1350,7 @@ class WebBrowser(Gtk.Window):
 
         return menu_item
 
+
     def on_internet_clicked(self, button):
         # Create a menu for internet options
         menu = Gtk.Menu()
@@ -1359,6 +1362,7 @@ class WebBrowser(Gtk.Window):
             "https://www.google.com/s2/favicons?domain=youtube.com"
         )
         menu.append(youtube_item)
+
 
 
         # SOCIAL section
@@ -1437,7 +1441,7 @@ class WebBrowser(Gtk.Window):
         )
         menu.append(wikipedia_item)
 
-    
+
         lkml_item = self.create_menu_item_with_favicon(
             "LKML (INFO)",
             "https://lkml.org",
@@ -1674,11 +1678,6 @@ class WebBrowser(Gtk.Window):
         self.skipHistory=True
         self.load_url(self.history[len(self.history)-1-self.histPoint])
 
-        newHist = []
-        for c in range(len(self.history)):
-            if c == 0 or self.history[c] != self.history[c - 1]:
-                newHist.append(self.history[c])
-        self.history = newHist
         new_urli = self.url_entry.get_text()
         #self.win2.load_directory(self.history[len(self.history)-1-self.histPoint])
         #self.skipHistory = True
@@ -1701,11 +1700,7 @@ class WebBrowser(Gtk.Window):
             #self.win2.current_path = self.url_entry.get_text()
             self.win2.load_directory(self.win2.current_path)
             print("DEB 1")
-        newHist = []
-        for c in range(len(self.history)):
-            if c == 0 or self.history[c] != self.history[c - 1]:
-                newHist.append(self.history[c])
-        self.history = newHist
+
         new_urli = self.url_entry.get_text()
 
     def on_refresh_clicked(self, widget):
@@ -1864,11 +1859,7 @@ class WebBrowser(Gtk.Window):
             self.fileView=False
         self.forceWeb=False
         print(self.fileView)
-        newHist = []
-        for c in range(len(self.history)):
-            if c == 0 or self.history[c] != self.history[c - 1]:
-                newHist.append(self.history[c])
-        self.history = newHist
+
         self.on_bookmark_button_toggled(None)
         if self.webview!=self.webview_org:
             self.normie_view.hide()
@@ -1902,6 +1893,20 @@ class WebBrowser(Gtk.Window):
                 new_uri=uri.split("&")[0]
             new_uri=new_uri.replace("watch?v=","/embed/")
             new_uri = new_uri.replace("/m.", "/www.")
+            if False:
+                if new_uri.__contains__("?start"):
+                    settings_yt = self.yt_embed.get_settings()
+                    desktop_user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                    # desktop_user_agent = "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
+                    settings_yt.set_property("user-agent", desktop_user_agent)
+                else:
+                    temp = self.webview
+                    self.webview = self.yt_embed
+                    self.setup_content_filters()
+                    self.setup_script_blocking()
+                    selg.yt_embed = self.webview
+                    self.webview = self.webview_org
+
             self.yt_embed.load_uri(new_uri)
         #if uri.__contains__("old.reddit"):
         #    new_uri = new_uri.replace("old.", "")
@@ -1912,11 +1917,13 @@ class WebBrowser(Gtk.Window):
             if url.startswith("file://"):
                 url = url.replace("file://", "")
             self.history.insert(len(self.history) - self.histPoint, url)
+            if len(self.history) - self.histPoint-1>=1 and self.history[len(self.history)-self.histPoint-1]== self.history[len(self.history)-self.histPoint-2]:
+                self.history[len(self.history)-self.histPoint-2]="null"
             newHist = []
             for c in range(len(self.history)):
-                if c==0 or self.history[c]!=self.history[c-1]:
+                if self.history[c]!="null":
                     newHist.append(self.history[c])
-            #self.history = newHist
+            self.history = newHist
             #self.history = list(dict.fromkeys(self.history))
         #print(self.history)
         self.url_entry.set_text(uri)
